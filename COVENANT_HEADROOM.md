@@ -1558,3 +1558,534 @@ Moody's research on leveraged loan defaults confirms that companies that obtain 
 | False positive rate | ≤ 20% of issuers flagged at Stress or above on headroom should remain in compliance without a credit event for more than four quarters — reflecting the urgency of thin headroom signals |
 
 
+## Signal Timing — Covenant Headroom
+
+---
+
+### Classification
+
+**Dual nature — gradual leading indicator during compression phase; instantaneous cliff event at breach.**
+
+Covenant headroom has a more complex timing structure than any other metric in this spec because it operates in two completely different modes depending on where the company sits in its stress trajectory. During the pre-breach compression phase it behaves like a slow-moving leading indicator — headroom narrows gradually over multiple quarters and the signal is directional. At the moment of breach it switches instantaneously to a coincident indicator — the legal event and the alert occur simultaneously with no lag. No other metric in this spec has this dual-mode characteristic.
+
+This dual nature means the system must treat covenant headroom differently depending on which mode is active. In compression mode the system is tracking a trend and the value of the signal is proportional to how far in advance it detects deterioration. In breach mode the system is detecting a discrete legal event and the value of the signal is in its immediacy — every hour of delay between breach occurrence and alert generation is a failure of the monitoring function.
+
+---
+
+### The Compression Phase — Leading Indicator Characteristics
+
+During the compression phase, covenant headroom typically narrows over 4–8 quarters before a breach occurs. This makes it a genuine leading indicator for the specific event of covenant breach and subsequent debt acceleration — the most acute form of credit stress.
+
+The compression phase has a specific relationship with the other metrics in this spec that creates a predictable detection sequence:
+
+```
+Typical sequence leading to covenant breach:
+
+Quarter −6 to −4:
+FCF compression begins (FCF metric flags first)
+EBITDA stable but declining
+Leverage ratio begins rising
+Coverage begins declining
+Covenant headroom begins narrowing from ample levels
+→ System: FCF Watch; Leverage Watch; Coverage Watch;
+           Covenant Headroom: no alert yet (>30%)
+
+Quarter −4 to −2:
+EBITDA declining materially
+Leverage in Significant or Aggressive band
+Coverage in Aggressive band
+Covenant headroom approaching 15%
+→ System: FCF Stress; Leverage Flag; Coverage Flag;
+           Covenant Headroom: Watch then Flag
+
+Quarter −2 to 0:
+EBITDA deterioration accelerating
+Leverage in Highly Leveraged band
+Coverage below 2.0x
+Covenant headroom below 10%
+→ System: All metrics at Stress or Critical;
+           Covenant Headroom: Stress then Critical (near-breach)
+
+Quarter 0 (breach):
+Covenant threshold crossed
+Disclosure in next quarterly filing
+→ System: IMMEDIATE CRITICAL — breach disclosed
+```
+
+The compression phase gives the system 4–8 quarters of warning before the breach event — a longer lead time than leverage or coverage alone because covenant headroom is the formalisation of exactly the thresholds that lenders have determined are unacceptable. When the ratio approaches the covenant threshold it is approaching the line that lenders will act on.
+
+---
+
+### The Breach Event — Coincident Indicator
+
+At the moment of breach the signal becomes coincident — it arrives simultaneously with the event rather than predicting it. The breach is disclosed in the next quarterly or annual filing, which arrives 40 days after quarter-end for a 10-Q and 60 days after year-end for a 10-K. The actual breach may have occurred at any point during the quarter — the filing discloses it but the system does not see it until the filing arrives.
+
+This filing lag — identical to every other metric — is the primary limitation of breach detection from structured filings. A company that breaches a covenant on day 1 of the quarter does not disclose it until the 10-Q is filed 40+ days after quarter-end. During the intervening period the lenders know about the breach and are negotiating privately, but the public filing system does not reflect it until the disclosure arrives.
+
+The partial mitigation for this lag is 8-K monitoring. An 8-K Item 1.01 filing for a covenant amendment or waiver confirms that a breach has occurred — even before the 10-Q discloses it formally. This is the most important intra-quarter signal for covenant headroom and provides detection up to several weeks earlier than waiting for the quarterly filing.
+
+```
+Breach detection timeline:
+
+Day 0: Breach occurs (ratio crosses threshold
+       at quarter-end measurement date)
+Day 1–30: Private negotiation between company
+          and lenders
+Day 1–30: 8-K Item 1.01 may be filed if waiver
+          or amendment is entered into
+          → System detects: Watch to Critical
+            escalation from 8-K keyword
+Day 40: 10-Q filed — breach formally disclosed
+        → System detects: CRITICAL from breach
+          keyword in Debt Footnote
+Day 40–60: Rating agency downgrades likely
+           → External confirmation
+
+Best case detection: Day 1–30 via 8-K
+Worst case detection: Day 40–45 via 10-Q
+Typical detection: Day 40 via 10-Q
+```
+
+---
+
+### Three-Tier Timing Structure
+
+| Tier | Source | Data Quality | Lag After Breach / Quarter-End | Use in System |
+|---|---|---|---|---|
+| **Tier 1 — Quarterly headroom update** | 10-Q / 10-K | Reviewed / audited; current ratio from XBRL; threshold from prior LLM extraction | **+40 days** after quarter-end (10-Q) | Headroom recomputed each quarter using updated ratios against stored thresholds; compression trend tracked |
+| **Tier 1b — Annual threshold refresh** | 10-K | Audited; full LLM re-extraction of covenant terms | **+60 days** after fiscal year-end | Full covenant terms re-extracted; thresholds updated for amendments; step-down schedule updated |
+| **Tier 2 — Intra-quarter breach signal** | 8-K Item 1.01 (amendment/waiver) | Event disclosure; confirms breach occurred | **Within 4 business days** of amendment/waiver signing | Earliest possible breach detection; keyword-triggered Critical alert before 10-Q arrives |
+| **Tier 3 — Earnings press release** | 8-K Item 2.02 | Preliminary; company may disclose covenant status | **+14 to +25 days** after quarter-end | Covenant compliance commentary if voluntarily disclosed; Phase 3 only |
+
+**Critical asymmetry vs prior metrics:** For leverage and coverage, Tier 1 (quarterly filing) provides a ratio update and Tier 2 (intra-quarter events) provides partial updates. For covenant headroom, Tier 1 provides both a ratio update AND the covenant compliance disclosure — the most important output. The ratio update alone (from XBRL) is secondary to the compliance disclosure (from LLM). This means that for covenant headroom, the LLM extraction at each quarterly filing is not a Phase 3 enhancement — it is the primary detection mechanism for the most important signal this metric produces.
+
+---
+
+### Staleness Analysis — Two Separate Components
+
+Unlike all prior metrics which have a single staleness profile, covenant headroom has two components with different staleness characteristics:
+
+**Component 1 — Current ratio (changes quarterly):**
+Same staleness as leverage and coverage — the ratio is between 40 and 130 days old at the time of download, depending on where in the quarterly cycle the filing arrives. The Q4 dark window applies identically.
+
+**Component 2 — Covenant threshold (changes only on amendment):**
+The threshold is stable between amendments. A leverage covenant of 5.5x set in January 2022 is still 5.5x in March 2024 unless the credit agreement was amended. This means the threshold component has very low staleness in normal conditions — the last extracted value remains valid until a new 8-K Item 1.01 or 10-K signals an amendment.
+
+```
+Threshold staleness management:
+
+After each 10-K: re-extract threshold via LLM
+                 (confirms no amendment occurred
+                 during the year or captures any
+                 amendment since last extraction)
+After each 8-K Item 1.01: re-extract threshold
+                           immediately if amendment
+                           keywords detected
+Between filings: use stored threshold
+                 Flag: "threshold from [last
+                 extraction date] — valid unless
+                 credit agreement amended since"
+
+If more than 12 months since last threshold
+extraction and no amendment detected:
+   Flag: "threshold extraction more than 12
+   months old — re-extraction recommended at
+   next 10-K; verify no unreported amendments"
+```
+
+---
+
+### The Q4 Dark Window — Moderate Impact
+
+The Q4 dark window affects covenant headroom differently from prior metrics:
+
+**Ratio component:** The dark window applies — the Q4 ratio update is not available until the 10-K is filed approximately 60 days after fiscal year-end. A company that crosses its covenant threshold in Q4 is not visible from the ratio perspective until the 10-K arrives.
+
+**Threshold component:** Unaffected — thresholds do not change between filings unless an amendment occurs.
+
+**Breach detection:** Partially mitigated. If a Q4 covenant breach occurs and the company seeks a waiver or amendment before year-end, the 8-K Item 1.01 for the waiver/amendment will be filed within 4 business days — providing breach detection well before the 10-K. If the company breaches but takes no action (banking on the ratio improving before year-end or deciding not to seek a waiver), the breach is only visible when the 10-K discloses it.
+
+The Q4 dark window for covenant headroom is therefore:
+```
+Best case: 4 business days (8-K waiver filed promptly)
+Typical case: 60 days after year-end (10-K)
+Worst case: 60 days after year-end (no 8-K filed)
+
+Mitigation: Monitor 8-K Item 1.01 filings daily
+for issuers with headroom below 15% during
+the Q4 dark window period (November through
+March for calendar-year companies)
+```
+
+---
+
+### Comparison: Covenant Headroom vs Other Metrics Signal Characteristics
+
+| Characteristic | Covenant Headroom | FCF | Coverage | Leverage | Liquidity | Maturity Wall |
+|---|---|---|---|---|---|---|
+| **Signal type in compression phase** | Gradual — ratio approaching fixed contract threshold | Flow deterioration | Flow deterioration | Stock accumulation | Stock depletion | Calendar countdown |
+| **Signal type at event** | Discrete legal event — instantaneous | N/A — no discrete event | N/A | N/A | Possible cliff event | Calendar cliff event |
+| **Lead time — compression phase** | 4–8 quarters | 4–6 quarters | 2–4 quarters | 2–4 quarters | 1–2 quarters | 2–5 years |
+| **Lead time — event detection** | 0–40 days (8-K to 10-Q) | N/A | N/A | N/A | 0–40 days (revolver pull) | 0 (breach) or known (maturity) |
+| **Filing lag at event** | 0–40 days | N/A | N/A | N/A | 0–40 days | 0 (known in advance) |
+| **Threshold is issuer-specific** | ✅ Yes — contractual | ❌ No — market convention | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Threshold changes over time** | ✅ Yes — step-downs | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Intra-quarter real-time signal** | ✅ Yes — 8-K Item 1.01 | ❌ No | ❌ No | Partial (Item 2.03) | ✅ Yes (Item 1.01) | ✅ Yes (424B, countdown) |
+| **Q4 dark window severity** | Moderate — 8-K partially mitigates | Severe | Significant | Moderate | Moderate | Minimal |
+| **Dual-mode timing** | ✅ Yes — compression then discrete | ❌ No | ❌ No | ❌ No | Partial | Partial |
+
+---
+
+### Cross-Metric Timing Interactions
+
+The covenant headroom metric's timing interacts with other metrics in ways that create combined signals more informative than any individual metric:
+
+**Interaction with Leverage and Coverage:**
+The ratio inputs to covenant headroom are the same as those computed for the leverage and coverage metrics. When both the standalone ratio alert (e.g. leverage in Aggressive band) and the covenant headroom alert (e.g. 12% headroom) are active simultaneously, the combined signal confirms that the deterioration is both economically significant and legally consequential. Neither alone is as informative as both together.
+
+**Interaction with Debt Maturity Wall:**
+The interest rate reset stress test in Covenant Headroom Formula 3 uses the maturity schedule from the Debt Maturity Wall metric. When a large maturity is approaching and the interest rate reset would compress coverage below the covenant minimum, the covenant headroom metric quantifies exactly how many basis points of rate increase the company can absorb before breaching. This is the most precise forward-looking stress computation the system produces.
+
+**Interaction with FCF:**
+The EBITDA cushion computation in covenant headroom (how much EBITDA can fall before breach) is the inverse of the FCF compression signal (EBITDA is already falling). When FCF compression is visible for 3+ quarters and the covenant EBITDA cushion is below 10%, the system can estimate the number of quarters until breach:
+
+```
+Estimated quarters to breach =
+    EBITDA Cushion ($)
+    / Quarterly EBITDA Decline ($)
+    (using trailing three-quarter average decline)
+
+Flag: "at current EBITDA deterioration rate of
+$X million per quarter, leverage covenant breach
+projected in approximately [N] quarters"
+
+This computation requires:
+   EBITDA Cushion from Covenant Headroom F1
+   Quarterly EBITDA decline from Coverage/Leverage
+   stored time series
+
+Phase 3 only — requires historical EBITDA series
+and extracted covenant threshold.
+```
+
+---
+
+### Updated Signal Timing Summary
+
+> **Signal Timing — Dual-mode: gradual leading indicator during compression (4–8 quarters lead time) switching to instantaneous coincident indicator at breach.**
+>
+> In the compression phase, covenant headroom narrows gradually over multiple quarters and gives 4–8 quarters of lead time before the breach event — longer than leverage or coverage alone because the covenant threshold is the contractual formalisation of the line that lenders will act on. The compression signal is best detected through the quarterly headroom percentage trend, the EBITDA cushion trend, and the step-down proximity calculation.
+>
+> At the breach event, the mode switches instantly. The breach is a discrete legal event that bypasses all graduated alert levels and triggers an immediate Critical escalation. Detection lag is 0–40 days — best case via 8-K Item 1.01 when a waiver or amendment is filed within days of breach; worst case via 10-Q filed 40 days after quarter-end.
+>
+> The Q4 dark window is moderately mitigated by 8-K Item 1.01 monitoring — any waiver or amendment filed during the dark window provides earlier breach detection than waiting for the 10-K. For issuers with headroom below 15% at Q3, daily 8-K monitoring should be activated through the November–March window.
+>
+> Covenant headroom is the only metric in the spec with an issuer-specific threshold that changes over time through step-downs and amendments. Threshold version control — tracking which credit agreement version the stored threshold comes from and monitoring for amendments — is the most operationally important maintenance task for this metric and has no equivalent in any other metric in the spec.
+
+## Frequency — Covenant Headroom
+
+---
+
+### Overview
+
+Covenant headroom has a more complex update structure than prior metrics in two specific ways. First, it has two distinct update cycles running simultaneously — the ratio component updates quarterly from XBRL (same as all prior metrics) while the threshold component updates only on covenant amendments, which are event-driven and unpredictable. Second, the most important signal this metric produces — breach disclosure — is not generated by a scheduled filing but by a discrete event that can occur at any point in the quarter and is only partially visible through real-time 8-K monitoring.
+
+The Leverage Frequency section covers the baseline filing schedule, EDGAR availability, and 8-K filtering rules that apply to all metrics. This section documents only the differences and covenant-specific considerations.
+
+---
+
+### What Is the Same as Prior Metrics
+
+| Channel | Filing Type | Phase 2 | Phase 3 |
+|---|---|---|---|
+| Quarterly ratio update | 10-Q | ✅ XBRL ratio recompute; proxy headroom only | ✅ XBRL ratio + stored threshold → headroom computation |
+| Annual full refresh | 10-K | ✅ XBRL ratio + LLM threshold extraction | ✅ Full LLM re-extraction of all covenant terms |
+| Earnings press release | 8-K Item 2.02 | ❌ Ignore | ✅ Add — covenant compliance commentary |
+| Debt acceleration / default | 8-K Item 2.04 | ✅ Immediate Critical alert | ✅ Same |
+
+---
+
+### Covenant Headroom-Specific Differences
+
+**Difference 1 — Threshold update cycle is amendment-driven, not filing-driven**
+
+For every prior metric, data updates arrive on a predictable schedule tied to filing deadlines. Covenant thresholds update only when the credit agreement is amended — which can happen at any time, with no advance notice, triggered by either a covenant breach (waiver/amendment to cure) or a proactive refinancing (new facility with different terms).
+
+```
+Threshold version control system:
+
+At each 10-K filing:
+   Full LLM re-extraction of all covenant terms
+   Compare extracted thresholds to stored values:
+   If unchanged: confirm stored values; update
+   extraction date
+   If changed: update stored values; log amendment:
+   {
+     "amendment_detected": true,
+     "prior_threshold": X.Xx,
+     "new_threshold": Y.Yy,
+     "change_type": "tightened/loosened/reset",
+     "detected_in": "10-K [date]",
+     "credit_agreement_version": "[version string]"
+   }
+
+At each 8-K Item 1.01 (amendment/waiver):
+   Immediate LLM re-extraction of new covenant terms
+   Update stored thresholds immediately
+   Do not wait for next quarterly filing
+   Flag: "covenant terms updated from 8-K
+   Item 1.01 dated [date] — thresholds supersede
+   prior stored values"
+
+Between amendments:
+   Use stored thresholds without re-extraction
+   Flag on each output: "threshold from [source
+   document] dated [date] — valid unless
+   credit agreement amended since [date]"
+
+If more than 365 days since last extraction
+with no amendment detected:
+   Trigger re-extraction at next 10-K
+   Flag: "threshold extraction age exceeds
+   12 months — re-extraction required"
+```
+
+---
+
+**Difference 2 — 8-K Item 1.01 is a primary detection channel**
+
+For all prior metrics, 8-K Item 1.01 is a secondary channel monitored with keyword filters. For covenant headroom, Item 1.01 is the primary real-time breach detection channel — it provides the earliest possible signal that a covenant breach has occurred, typically 2–6 weeks before the quarterly filing discloses it formally.
+
+```
+Item 1.01 covenant headroom processing:
+
+Phase 2 — keyword monitoring for flagged issuers:
+   Monitor issuers with proxy headroom alerts
+   Keywords: "waiver", "amendment", "covenant",
+   "forbearance", "lender consent", "default"
+   If keywords detected:
+      Generate immediate Watch-to-Critical escalation
+      depending on keyword severity
+      Flag: "8-K Item 1.01 covenant event detected —
+      [keyword]; manual review required pending
+      Phase 3 LLM extraction"
+
+Phase 3 — full LLM extraction for all issuers:
+   All Item 1.01 filings processed by LLM
+   regardless of prior alert level
+   LLM determines:
+   Is this a covenant amendment? → update threshold
+   Is this a waiver? → breach confirmed; Critical
+   Is this a routine facility renewal? → update
+   maturity and terms; no breach signal
+   Is this a new facility replacing existing?
+   → extract new covenant terms; replace stored
+   values; compare new to old for tightening/
+   loosening signal
+
+   Output structure for each Item 1.01:
+   {
+     "filing_type": "8-K Item 1.01",
+     "event_type": "waiver/amendment/new_facility/
+                    renewal/other",
+     "covenant_breach_implied": true/false,
+     "new_threshold": X.Xx (if amended),
+     "prior_threshold": Y.Yy,
+     "change_direction": "tightened/loosened/unchanged",
+     "waiver_expiry": "YYYY-MM-DD" (if waiver),
+     "alert_generated": "level"
+   }
+```
+
+---
+
+**Difference 3 — Waiver expiry monitoring requires a calendar trigger**
+
+When a covenant waiver is obtained, it has an expiry date. If the company's financial condition has not improved by that date and no permanent amendment is obtained, the breach recurs automatically. Waiver expiry monitoring is the covenant-equivalent of the debt maturity countdown — a fixed future date that generates an escalating alert as it approaches.
+
+```
+Waiver expiry monitoring:
+
+When waiver is detected (from 8-K Item 1.01
+or Debt Footnote):
+   Store:
+   {
+     "waiver_date": "YYYY-MM-DD",
+     "waiver_expiry": "YYYY-MM-DD",
+     "covenant_type": "leverage/coverage/other",
+     "waiver_status": "active/expired/replaced"
+   }
+
+Daily computation (same as maturity countdown):
+   Days_to_expiry = waiver_expiry - current_date
+
+   If Days_to_expiry > 180: Stress (waiver active)
+   If Days_to_expiry 90–180: Stress — escalating
+   If Days_to_expiry 30–90: Critical
+   If Days_to_expiry < 30: Critical — highest urgency
+   Flag: "waiver expires [date] — [N] days remaining;
+   breach recurs if no amendment or improvement"
+
+   If Days_to_expiry < 0 (waiver expired):
+      Check whether permanent amendment obtained:
+      If yes: update stored covenant; close waiver
+      If no: Critical — "waiver expired without
+      permanent resolution; breach status unknown;
+      manual review required"
+
+Resolution signals:
+   8-K Item 1.01 with amendment language after
+   waiver: waiver replaced by amendment;
+   update threshold; close waiver monitoring
+   10-Q/10-K compliance affirmation after waiver:
+   waiver expired without breach recurrence;
+   close waiver monitoring
+```
+
+---
+
+**Difference 4 — 8-K Item 2.02 provides genuine covenant signal**
+
+For FCF and leverage, the earnings press release (Item 2.02) rarely discloses the specific metric inputs needed. For covenant headroom, many companies explicitly state covenant compliance in their earnings press releases — particularly those with thin headroom managing investor expectations.
+
+```
+Item 2.02 covenant headroom processing:
+
+Phase 3 only:
+LLM reads Item 2.02 text for:
+   Covenant compliance statement:
+   "We were in compliance with all financial
+   covenants as of [date]" → positive confirmation;
+   store as interim compliance signal 14–25 days
+   before 10-Q
+   Headroom disclosure:
+   "Our leverage ratio was [X.Xx]x compared to a
+   covenant maximum of [Y.Yy]x" → update headroom
+   computation with preliminary figures
+   Waiver or amendment announcement:
+   Immediate Critical alert regardless of
+   other disclosures
+
+Priority: Item 2.02 covenant compliance statement
+is one of the most valuable Tier 2 signals in
+the system — it provides covenant status 14–25
+days earlier than the 10-Q and does not require
+ratio computation to interpret.
+
+Storage: Store as "preliminary compliance status"
+separately from Tier 1 10-Q confirmed status.
+Do not overwrite Tier 1 with Tier 2 data.
+```
+
+---
+
+**Difference 5 — Step-down schedule generates independent calendar-based alerts**
+
+Covenant step-downs are fixed future threshold changes that generate alerts through proximity, not through ratio movement. Like the maturity wall countdown, step-down proximity alerts run daily against a stored step-down schedule.
+
+```
+Step-down proximity monitoring:
+
+When step-down schedule extracted (from 10-K
+or credit agreement):
+   Store array of {date, new_threshold} pairs
+
+Daily computation:
+   For each upcoming step-down:
+      Days_to_step_down = step_down_date - current_date
+      Post_step_down_headroom =
+         new_threshold − current_ratio (if maximum)
+         OR current_ratio − new_threshold (if minimum)
+
+      Alert logic per Stress Threshold Dimension 3:
+      > 365 days: No alert
+      180–365 days AND post-headroom 10%–20%: Watch
+      90–180 days AND post-headroom 5%–10%: Flag
+      < 90 days AND post-headroom < 5%: Stress
+      Post-headroom < 0% at any horizon: Critical
+      (projected breach)
+
+Resolution: if ratio improves before step-down,
+recompute post-step-down headroom and
+downgrade alert if appropriate
+```
+
+---
+
+**Difference 6 — Credit agreement exhibit monitoring**
+
+When a new credit agreement or amendment is filed as an exhibit (Exhibit 10.x) to a 10-K or as an 8-K Item 1.01 attachment, it contains the most complete covenant information available. Monitoring for new exhibit filings is unique to this metric.
+
+```
+Credit agreement exhibit monitoring:
+
+Phase 3:
+At each 10-K filing:
+   Check exhibit index for new or amended
+   Exhibit 10.x with covenant-relevant titles:
+   "Credit Agreement," "Loan Agreement,"
+   "Amendment No. X to Credit Agreement,"
+   "Amended and Restated Credit Agreement"
+
+   If new or amended exhibit found:
+      LLM extracts full covenant definitions
+      including Consolidated EBITDA definition
+      with complete addback list
+      Updates stored covenant terms
+      Computes Formula 2 headroom with new terms
+      Flags any changes from prior version:
+      "Credit agreement amended — covenant
+      EBITDA definition updated; [X] addback
+      items added/removed; addback cap changed
+      from [prior] to [new]"
+
+At each 8-K Item 1.01:
+   If exhibit attached (most material amendments
+   include the full amended agreement as an exhibit):
+      Same LLM extraction as 10-K exhibit
+      Processed immediately on filing date
+      Do not wait for next quarterly filing
+
+If no exhibit attached to 8-K Item 1.01:
+   Use Debt Footnote at next quarterly filing
+   for updated threshold
+   Flag: "amendment disclosed in 8-K but full
+   agreement not filed as exhibit — covenant
+   terms update deferred to next 10-K/10-Q
+   LLM extraction"
+```
+
+---
+
+### Full Update Schedule — Calendar Year Large Accelerated Filer
+
+| Timing | Event | Channel | Covenant Headroom Update Type |
+|---|---|---|---|
+| Every business day | Step-down proximity countdown | Internal computation | Days-to-step-down updated; threshold crossing alerts if post-step-down headroom deteriorates |
+| Every business day | Waiver expiry countdown | Internal computation | Days-to-waiver-expiry updated; escalating alerts as expiry approaches |
+| ~Jan 30 – Feb 15 | Q4 earnings press release | 8-K Item 2.02 | Covenant compliance statement if disclosed; headroom if voluntarily disclosed; Phase 3 only |
+| ~Mar 31 | 10-K filed | 10-K | Full LLM re-extraction of all covenant terms; threshold version confirmed or updated; Formula 1, 2, and 3 headroom computed; step-down schedule refreshed; breach/waiver/amendment disclosure checked |
+| ~Apr 14–25 | Q1 earnings press release | 8-K Item 2.02 | Covenant compliance statement; Phase 3 only |
+| ~May 10 | Q1 10-Q filed | 10-Q | Ratio updated from XBRL; headroom recomputed against stored threshold; breach/waiver disclosure checked via LLM; compliance affirmation confirmed |
+| ~Jul 15–25 | Q2 earnings press release | 8-K Item 2.02 | Covenant compliance statement; Phase 3 only |
+| ~Aug 9 | Q2 10-Q filed | 10-Q | Same as Q1 10-Q |
+| ~Oct 14–25 | Q3 earnings press release | 8-K Item 2.02 | Covenant compliance statement; Phase 3 only |
+| ~Nov 9 | Q3 10-Q filed | 10-Q | Same as Q1 10-Q |
+| Nov 9 – Mar 31 | Q4 dark window | Limited | Ratio not updated; threshold unchanged unless amendment; monitor 8-K Item 1.01 daily for flagged issuers; waiver and step-down countdowns continue |
+| Any business day | Covenant waiver or amendment | 8-K Item 1.01 | IMMEDIATE: breach confirmed (if waiver); threshold updated (if amendment); full LLM extraction of new terms; Critical alert generated |
+| Any business day | New credit facility | 8-K Item 1.01 + Exhibit 10.x | Full LLM extraction of new covenant terms; replace stored thresholds; compute headroom under new terms; compare new terms to prior for tightening/loosening signal |
+| Any business day | Debt acceleration / default | 8-K Item 2.04 | IMMEDIATE CRITICAL — acceleration confirmed; covenant breach cause |
+| Any business day | Going concern disclosure | Any filing | IMMEDIATE CRITICAL — same as all prior metrics |
+
+---
+
+### Phase Summary
+
+**Phase 2:**
+
+Proxy headroom only — flag when leverage exceeds 5.5x or coverage falls below 2.0x as market-convention approximations of typical covenant thresholds. Label all proxy outputs prominently as "proxy — actual covenant terms not extracted." Monitor 8-K Item 1.01 with keyword filter for issuers already at proxy alert levels — detect waiver and amendment events. Monitor 8-K Item 2.04 as automatic Critical escalation. Run waiver expiry countdown for any waivers identified through keyword monitoring. Run going concern keyword search across all filing types. Apply step-down proximity alerts only if step-down schedule was manually entered at onboarding (cannot be extracted automatically in Phase 2 without LLM).
+
+**Phase 3:**
+
+Replace proxy approach with actual LLM-extracted thresholds at each 10-K and event-driven update at each 8-K Item 1.01. Compute Formula 1 basic headroom quarterly using XBRL ratios and stored thresholds. Compute Formula 2 adjusted headroom annually using full Consolidated EBITDA definition and addback list from credit agreement exhibit. Compute Formula 3 forward stress test quarterly using projected ratios from FCF and Leverage time series combined with step-down schedule. Monitor 8-K Item 2.02 for voluntary covenant compliance and headroom disclosures. Monitor credit agreement exhibits at each 10-K for addback list changes. Run daily step-down proximity countdown and waiver expiry countdown. Implement estimated quarters-to-breach computation using EBITDA cushion and trailing EBITDA decline rate.
+
