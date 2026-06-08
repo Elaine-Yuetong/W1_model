@@ -654,9 +654,9 @@ All Formula 2 items apply plus the following additional items.
 | **Current Liabilities (subtotal)** | F1 | Primary: `us-gaap:LiabilitiesCurrent` | Structured — required GAAP subtotal | Same reliability as Current Assets. If null after primary tag attempt, sum: `us-gaap:AccountsPayableCurrent` + `us-gaap:AccruedLiabilitiesCurrent` + `us-gaap:LongTermDebtCurrent` + `us-gaap:ShortTermBorrowings` + `us-gaap:DeferredRevenueCurrent` + `us-gaap:OtherLiabilitiesCurrent`. Flag: "current liabilities derived from components — verify completeness." |
 | **Inventory** | F1 | Primary: `us-gaap:InventoryNet` Fallback: `us-gaap:InventoryGross` | Structured — with valuation method risk | Net of valuation allowances. If only gross inventory is tagged, flag: "gross inventory used — inventory write-down allowance not deducted; quick ratio may be overstated." For companies with no inventory (service companies, financials, software), tag will be absent — treat as zero with no flag needed; verify SIC code confirms no-inventory business model. |
 | **Prepaid Expenses** | F1 | Primary: `us-gaap:PrepaidExpenseAndOtherAssetsCurrent` Fallback: `us-gaap:PrepaidExpenseCurrent` | Structured — sometimes bundled with other current assets | Fallback tag excludes "other current assets" component. If neither tag present, attempt: `us-gaap:OtherAssetsCurrent` as proxy. Flag if used: "prepaid expenses proxied by other current assets — quick ratio may be slightly understated." If all tags null and company is a service business: treat as zero; flag. |
-| **Cash & Equivalents** | F1, F2, F3 | Primary: `us-gaap:CashAndCashEquivalentsAtCarryingValue` Fallback 1: `us-gaap:CashCashEquivalentsAndShortTermInvestments` Fallback 2: `us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents` | Structured — with restriction and bundling risk | Same extraction logic as Leverage Formula 1. Fallback 1 bundles short-term investments — do not double-count with Short-Term Investments tag. Fallback 2 includes restricted cash — subtract `us-gaap:RestrictedCashAndCashEquivalents` if available; flag if not. Restricted cash is not freely available and must not be included in liquidity calculations. |
+| **Cash & Equivalents** | F1, F2, F3 | Primary: `us-gaap:CashAndCashEquivalentsAtCarryingValue` Fallback 1: `us-gaap:CashCashEquivalentsAndShortTermInvestments` Fallback 2: `us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents` | Structured — with restriction and bundling risk | See LEVERAGE.md → Section "Extraction Fallback Logic" → Input 5 (Unrestricted Cash) — apply identical four-step fallback chain including restricted cash detection and subtraction. Fallback 1 bundles short-term investments — do not double-count with Short-Term Investments tag. Fallback 2 includes restricted cash — subtract `us-gaap:RestrictedCashAndCashEquivalents` if available; flag if not. Restricted cash is not freely available and must not be included in liquidity calculations. |
 | **Short-Term Investments** | F1, F2, F3 | Primary: `us-gaap:ShortTermInvestments` Fallback: `us-gaap:MarketableSecuritiesCurrent` | Structured — with bundling risk | Check for overlap with cash tag. If `us-gaap:CashCashEquivalentsAndShortTermInvestments` was used for cash, do not add Short-Term Investments separately — already included. Flag: "short-term investments already bundled in cash tag — not added separately to avoid double-count." |
-| **Current Portion of LT Debt** | F1, F2, F3 | Primary: `us-gaap:LongTermDebtCurrent` Fallback: `us-gaap:DebtCurrent` | Structured — with double-count risk | Same extraction logic and double-count risk as Leverage Formula 1. `DebtCurrent` may aggregate short-term borrowings already captured separately. Verify before summing. |
+| **Current Portion of LT Debt** | F1, F2, F3 | Primary: `us-gaap:LongTermDebtCurrent` Fallback: `us-gaap:DebtCurrent` | Structured — with double-count risk | See LEVERAGE.md → Section "Extraction Fallback Logic" → Input 2 (Current Portion of Long-Term Debt) — apply identical double-count check. `DebtCurrent` may aggregate short-term borrowings already captured separately. Verify before summing. |
 | **Short-Term Borrowings / Commercial Paper** | F1, F2, F3 | Primary: `us-gaap:ShortTermBorrowings` Fallback 1: `us-gaap:CommercialPaper` Fallback 2: `us-gaap:NotesPayableCurrent` Fallback 3: `us-gaap:LineOfCreditCurrent` | Structured — must sum all non-null values | Same Apple validation finding applies here: `ShortTermBorrowings` alone misses CP issuers. Sum all non-null tags — a company can have both CP and a drawn revolver simultaneously. |
 | **Current Ratio** (derived) | F1 | No standard tag | Structured inputs, derived result | Current Ratio = AssetsCurrent / LiabilitiesCurrent. If either input null → ratio null. If LiabilitiesCurrent = 0 → undefined; flag: "zero current liabilities — verify filing completeness." |
 | **Quick Ratio** (derived) | F1 | No standard tag | Structured inputs, derived result | Quick Ratio = (AssetsCurrent − InventoryNet − PrepaidExpense) / LiabilitiesCurrent. If Inventory null: use AssetsCurrent without deduction and flag: "inventory not found — quick ratio equals current ratio; may be overstated for manufacturing/retail issuers." If Prepaid null: omit deduction silently for service companies; flag for others. |
@@ -891,7 +891,7 @@ Step 4 — If all steps return null:
 
 **What we are trying to capture:** Freely available cash and instruments convertible to cash within 90 days.
 
-Same fallback logic as Leverage Formula 1. Summarised here for completeness:
+See LEVERAGE.md → Section "Extraction Fallback Logic" → Input 5 (Unrestricted Cash) — apply identical four-step fallback chain including restricted cash detection. Summarised here for completeness:
 
 ```
 Step 1 — Try: us-gaap:CashAndCashEquivalentsAtCarryingValue
@@ -947,7 +947,7 @@ Step 5 — If all steps null and no bundling detected:
 
 ### Input 7 — Near-Term Debt Components (for Available Liquidity Coverage)
 
-Same fallback logic as Leverage Formula 1 for debt components. Summarised here:
+See LEVERAGE.md → Section "Extraction Fallback Logic" → Input 1 through Input 3 (Short-Term Borrowings, Current LT Debt, Long-Term Debt) — apply identical fallback chains; sum all non-null values; apply double-count check. Summarised here:
 
 ```
 Short-Term Borrowings / CP:
@@ -1623,7 +1623,7 @@ These five component signals should be computed and stored alongside the four ra
 
 ### Overview
 
-Liquidity shares the same six-channel update structure as all prior metrics. Filing deadlines, EDGAR availability rules, and the Phase 2 vs Phase 3 priority framework are identical — refer to the Leverage Frequency section for full channel definitions, 8-K filtering rules, and expected filing volumes by issuer type.
+Liquidity shares the same six-channel update structure as all prior metrics. Filing deadlines, EDGAR availability rules, and the Phase 2 vs Phase 3 priority framework are identical — See LEVERAGE.md → Section "Frequency" → full section — apply identical six-channel framework, filing deadlines, EDGAR availability, and 8-K filtering rules; this section documents liquidity-specific differences only. 8-K filtering rules, and expected filing volumes by issuer type.
 
 This section documents only the differences and liquidity-specific considerations that do not appear in prior frequency sections. There are more differences here than for any prior metric because liquidity has more real-time event triggers than any other metric in this spec.
 
