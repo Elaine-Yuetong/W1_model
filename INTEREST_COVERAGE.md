@@ -818,6 +818,121 @@ One coverage-specific addition: interest expense is a duration item that accrues
 >
 > Coverage leads leverage in earnings-driven stress scenarios. Leverage leads coverage in debt-accumulation scenarios. The two metrics should always be evaluated together — simultaneous deterioration in both is the strongest quantitative stress signal the system can produce from structured data alone.
 
+## Frequency — Interest Coverage
+---
+
+### Overview
+
+Interest coverage shares the same six-channel update structure as leverage. The update schedule, filing deadlines, and EDGAR availability rules are identical — refer to the Leverage Frequency section for the full channel definitions, 8-K filtering rules, and expected filing volumes by issuer type.
+
+This section documents only the differences and coverage-specific considerations that do not appear in the Leverage Frequency section.
+
+---
+
+
+### Shared Structure with LEVERAGE.md
+
+Interest coverage shares the same six-channel update structure, filing deadlines, and Phase 2/Phase 3 priorities as leverage. Refer to the **Leverage Frequency** section for:
+
+- The full six-channel table (10-Q, 10-K, Item 2.02, Item 2.03, Item 2.04, 424B)
+- Filing deadlines (40 days / 60 days / 4 business days)
+- Phase 2: monitor 10-Q/10-K + Item 2.04 automatic escalation
+- Phase 3: add Item 2.02, Item 2.03, 424B
+- 8-K filtering rules and expected filing volumes
+
+The following subsections document only the **coverage-specific differences** that do not appear in the Leverage section.
+
+All six channels apply without modification:
+
+| Channel | Filing Type | Phase 2 | Phase 3 |
+|---|---|---|---|
+| Quarterly financials | 10-Q | ✅ Primary source | ✅ Primary source |
+| Annual financials | 10-K | ✅ Primary source | ✅ Primary source |
+| Earnings press release | 8-K Item 2.02 | ❌ Ignore | ✅ Add |
+| Material debt creation | 8-K Item 2.03 | ❌ Ignore | ✅ Add (with caveat — see below) |
+| Debt acceleration / default | 8-K Item 2.04 | ✅ Monitor (alert only) | ✅ Monitor |
+| New bond issuance | 424B prospectus | ❌ Ignore | ✅ Add (with caveat — see below) |
+
+Filing deadlines are identical: 40 calendar days after quarter-end for large accelerated filers (10-Q), 60 days after fiscal year-end (10-K), 4 business days after triggering event (8-K Items 2.03 and 2.04). EDGAR availability within minutes of acceptance. All sourced and validated in the Leverage Frequency section.
+
+---
+
+### Coverage-Specific Differences
+
+**Difference 1 — Item 2.03 and 424B update logic is asymmetric for coverage**
+
+For leverage, an intra-quarter debt event (Item 2.03 or 424B) allows a partial ratio update: new debt increases the numerator of Net Debt immediately, and the system can recompute a partial leverage estimate using the prior period's EBITDA.
+
+For coverage, the same event changes future interest expense — but the current quarter's interest expense accrual is already partially committed and cannot be precisely recomputed from the 8-K disclosure alone. The system cannot produce a meaningful partial coverage estimate from a debt event filing.
+
+**Correct system behavior when Item 2.03 or 424B is detected:**
+
+```
+Do NOT attempt to recompute coverage ratio intra-quarter.
+
+Instead:
+Step 1 — Log the debt event: issuer, date, amount, coupon rate
+         (coupon extracted from 8-K Item 2.03 text or 424B
+         pricing table via LLM)
+Step 2 — Compute forward interest expense impact:
+         Estimated additional annual interest =
+         New Debt Amount × Coupon Rate
+         Estimated additional quarterly interest =
+         Annual interest / 4
+Step 3 — Compute projected coverage:
+         Projected Coverage =
+         Prior EBITDA / (Prior Interest Expense
+         + Estimated additional quarterly interest)
+Step 4 — Flag prominently:
+         "Projected coverage estimate — based on new debt event
+         filed [date]; actual interest expense impact will appear
+         in [next quarter] 10-Q; treat as directional signal only"
+Step 5 — Store projected figure separately from Tier 1 ratio.
+         Do not overwrite prior Tier 1 coverage figure.
+```
+
+This projected coverage estimate is more useful for coverage than the partial leverage update is for leverage, because interest expense is contractually fixed at the coupon rate — the estimate is mechanical, not speculative. Flag it as a projection but treat it as a reasonably reliable directional signal for Phase 3.
+
+**Difference 2 — Item 2.02 is more valuable for coverage than for leverage**
+
+As noted in Signal Timing, earnings are the primary driver of coverage deterioration in the most common stress scenarios. The earnings press release (Item 2.02) discloses revenue, EBITDA, and sometimes net income 14–25 days before the 10-Q. For coverage, this means the most important input — EBITDA — becomes visible earlier than it does for leverage (where the debt stock, which changes slowly, is the more important input).
+
+In Phase 3, when Item 2.02 monitoring is active, treat the coverage directional signal from the press release as higher priority than the leverage directional signal from the same filing. If the press release implies EBITDA has fallen sharply, the coverage alert is more likely to be confirmed by the subsequent 10-Q than the leverage alert.
+
+**Difference 3 — The Q4 dark window affects coverage and leverage differently**
+
+For leverage, the Q4 dark window (Q3 10-Q filed ~November 9, 10-K filed ~March 31, gap of ~142 days) primarily matters if the company takes on significant new debt in Q4. This is visible via 8-K Item 2.03 or 424B filings, partially mitigating the dark window for leverage.
+
+For coverage, the Q4 dark window matters if Q4 EBITDA deteriorates — and Q4 EBITDA is not disclosed anywhere until the earnings press release (Item 2.02, typically filed in late January or early February for calendar-year companies) or the 10-K itself. There is no intra-quarter EBITDA signal equivalent to the debt event filings that partially illuminate the leverage dark window.
+
+**This means the Q4 dark window is structurally worse for coverage than for leverage.** A company whose EBITDA collapses in Q4 will not trigger a coverage alert until the Item 2.02 press release approximately 45–50 days after December 31, or the 10-K approximately 60 days after December 31. Your system should treat Q4 as a monitoring gap for coverage and flag any issuer already in the "Significant" or "Aggressive" band at Q3 as requiring heightened attention during the November–February window.
+
+---
+
+### Full Update Schedule — Calendar Year Large Accelerated Filer
+
+| Month | Event | Channel | Coverage Update Type |
+|---|---|---|---|
+| ~Jan 30 – Feb 15 | Q4 / full year earnings press release | 8-K Item 2.02 | Preliminary EBITDA estimate — directional signal; Phase 3 only |
+| ~Mar 31 | 10-K filed | 10-K | Full structured recompute (Formula 1); full LLM extraction possible (Formula 2/3) |
+| ~Apr 14–25 | Q1 earnings press release | 8-K Item 2.02 | Preliminary EBITDA estimate — directional signal; Phase 3 only |
+| ~May 10 | Q1 10-Q filed | 10-Q | Full structured recompute |
+| ~Jul 15–25 | Q2 earnings press release | 8-K Item 2.02 | Preliminary EBITDA estimate — directional signal; Phase 3 only |
+| ~Aug 9 | Q2 10-Q filed | 10-Q | Full structured recompute |
+| ~Oct 14–25 | Q3 earnings press release | 8-K Item 2.02 | Preliminary EBITDA estimate — directional signal; Phase 3 only |
+| ~Nov 9 | Q3 10-Q filed | 10-Q | Full structured recompute |
+| Nov 9 – Mar 31 | **Q4 dark window** | None for EBITDA | **No coverage update possible — heightened monitoring period for issuers already flagged** |
+| Any business day | New bond / loan issuance | 8-K Item 2.03 or 424B | Projected forward coverage estimate — Phase 3 only; see Difference 1 above |
+| Any business day | Debt acceleration / default | 8-K Item 2.04 | Automatic Stress alert — no ratio recompute |
+
+---
+
+### Phase Summary
+
+**Phase 2:** Monitor 10-Q and 10-K only. Full structured recompute 4× per year (3 × 10-Q + 1 × 10-K). Monitor 8-K Item 2.04 as automatic escalation trigger (type-level filter, no text processing). Flag Q4 dark window for issuers already in Significant or Aggressive band at Q3.
+
+**Phase 3:** Add 8-K Item 2.02 for early EBITDA directional signal (14–25 days before 10-Q). Add 8-K Item 2.03 and 424B for projected forward coverage estimate using coupon rate and new debt amount. Maintain Item 2.04 automatic escalation. Apply keyword filter to 8-K Items 1.01, 8.01, and 7.01 for debt-related disclosures that may affect interest expense.
+
 
 
 
