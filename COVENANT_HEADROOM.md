@@ -711,4 +711,667 @@ Step 5 — If credit agreement is not publicly filed:
           summary only; addback list may be incomplete"
 ```
 
+## Structured or Unstructured — Covenant Headroom Metric (All Three Formulas)
+
+| Input / Component | Formula | Source Document | Structured or Unstructured | Notes |
+|---|---|---|---|---|
+| **Current Leverage Ratio** | F1, F2, F3 | Derived from Leverage Formula 1 (already extracted) | Structured — reused from prior metric | Net Debt / EBITDA computed deterministically from XBRL. No re-extraction needed — pull from stored Leverage metric output for same period. If Leverage Formula 1 null for this period: Covenant Headroom F1 = null; flag: "leverage ratio unavailable — headroom cannot be computed." |
+| **Current Coverage Ratio** | F1, F2, F3 | Derived from Coverage Formula 1 (already extracted) | Structured — reused from prior metric | EBITDA / Interest Expense computed deterministically. Pull from stored Coverage metric output. Same null propagation rule as leverage ratio. |
+| **Current Cash / Available Liquidity** | F1, F2, F3 | Derived from Liquidity Formula 1 (already extracted) | Structured — reused from prior metric | Cash and available liquidity already extracted. Pull from stored Liquidity metric output. For liquidity covenant headroom only. |
+| **Current Capex** | F1 (capex covenant only) | Cash Flow Statement — Investing Activities | Structured — XBRL tagged | `us-gaap:PaymentsToAcquirePropertyPlantAndEquipment` — already extracted for FCF metric. Reuse stored value. |
+| **Maximum Leverage Covenant Threshold** | F1, F2, F3 | Debt Footnote — covenant compliance section | **Unstructured — LLM required** | No XBRL tag exists. LLM reads Debt Footnote covenant section. Extracts numeric threshold (e.g. 5.5x) and exact covenant name as stated in filing. If not found in Debt Footnote: escalate to Credit Agreement Exhibit 10.x. If neither source yields threshold: headroom = null; flag: "leverage covenant threshold not extracted — headroom computation not possible." |
+| **Minimum Coverage Covenant Threshold** | F1, F2, F3 | Debt Footnote — covenant compliance section | **Unstructured — LLM required** | Same extraction approach as leverage threshold. LLM must also identify whether this is a maintenance covenant (tested every period — relevant for headroom) or an incurrence covenant (tested only on action — flag as non-maintenance; not a default trigger). |
+| **Minimum Liquidity Covenant Threshold** | F1, F2, F3 | Debt Footnote — covenant compliance section | **Unstructured — LLM required** | Dollar amount not a ratio. LLM extracts minimum cash balance or minimum revolver availability required. Must also identify whether springing covenant — if so, extract trigger level as well as threshold. Flag springing covenant existence even if currently inactive. |
+| **Maximum Capex Covenant Threshold** | F1 (if present) | Debt Footnote — covenant compliance section | **Unstructured — LLM required** | Less common than leverage and coverage covenants. LLM extracts annual capex limit in dollars. Also extracts rollover provisions if present. If no capex covenant found: flag as absent — not an error. |
+| **Covenant Testing Frequency** | F1, F2, F3 | Debt Footnote | **Unstructured — LLM required** | Most maintenance covenants tested quarterly. Some tested semi-annually or annually. LLM extracts: "tested as of the last day of each fiscal quarter" or equivalent. Flag if non-quarterly: "covenant tested [frequency] — headroom alerts only actionable at test dates." |
+| **Covenant Compliance Affirmation** | F1, F2, F3 | Debt Footnote — end of covenant description | **Unstructured — LLM required** | LLM searches for standard compliance boilerplate: "As of [date], we were in compliance with all financial covenants." Absence of this statement is itself a flag — most companies include it if compliant. Flag if absent: "no covenant compliance affirmation found — verify whether company is in compliance." |
+| **Covenant Breach Disclosure** | F1, F2, F3 | Debt Footnote + MD&A + Auditor's Report | **Unstructured — LLM required** | Highest priority extraction in this metric. LLM searches for: "not in compliance," "covenant violation," "event of default," "waiver," "breach." If any breach language found: IMMEDIATE CRITICAL ALERT regardless of all other metric outputs. |
+| **Waiver or Amendment Disclosure** | F1, F2, F3 | Debt Footnote + 8-K Item 1.01 | **Unstructured — LLM required** | LLM extracts: waiver date, which covenant was waived, waiver expiry date if any, and any conditions attached to waiver. Amendment: new threshold values, new step-down schedule, new addback list. Store waiver as confirmed breach signal even after resolution. |
+| **Covenant Step-Down Schedule** | F1, F2, F3 | Debt Footnote + Credit Agreement | **Unstructured — LLM required** | LLM extracts future threshold values and their effective dates. Example: "maximum leverage of 5.5x through Q2 2025, reducing to 5.0x thereafter." Store as array of {date, threshold} pairs. Used in Formula 3 forward stress test. Available in 10-K primarily; may be updated in 10-Q if amendment occurs. |
+| **Voluntary Headroom Disclosure** | F1, F2, F3 | MD&A — Liquidity and Capital Resources | **Unstructured — LLM required** | LLM searches for explicit headroom figures disclosed by management. Store separately as "management-disclosed headroom" — do not replace system-computed headroom. Flag divergence > 10% between management-disclosed and system-computed headroom. |
+| **Covenant EBITDA Definition** | F2, F3 | Credit Agreement — Definitions section (Exhibit 10.x) | **Unstructured — LLM required (extensive)** | Most complex extraction in this metric. LLM reads full "Consolidated EBITDA" or "Consolidated Adjusted EBITDA" definition from credit agreement. Extracts: (1) starting point, (2) each addback item individually, (3) any addback caps with specific percentages, (4) look-back period. Returns structured JSON list of addback items. May require reading 5–15 pages of legal definitions. Flag: "covenant EBITDA definition extracted from credit agreement dated [date] — verify most recent amendment." |
+| **Individual Addback Items** | F2, F3 | Credit Agreement — Consolidated EBITDA definition | **Unstructured — LLM required** | LLM extracts each addback item separately: restructuring charges, non-recurring items, SBC, management fees, pro forma synergies, etc. System applies each addback to GAAP EBITDA to compute Covenant EBITDA. Addback cap check: if cap present, verify sum of capped addbacks does not exceed cap. Flag: "addbacks at [X]% of cap — [Y]% of addback capacity remaining." |
+| **Addback Cap** | F2, F3 | Credit Agreement — Consolidated EBITDA definition | **Unstructured — LLM required** | LLM extracts cap percentage and the base to which it applies (e.g. "25% of Consolidated EBITDA before such addbacks"). Critical for companies where addbacks are large — a binding cap means GAAP EBITDA deterioration flows through fully to Covenant Leverage once the cap is reached. |
+| **Covenant Net Debt Definition** | F2, F3 | Credit Agreement — Definitions section | **Unstructured — LLM required** | LLM extracts any differences between credit agreement Net Debt and GAAP Net Debt. Common differences: restricted cash treatment, guarantees included or excluded, certain off-balance sheet items. Usually minor for straightforward capital structures; material for complex ones. |
+| **Pro Forma Treatment Rules** | F2, F3 | Credit Agreement — Definitions section | **Unstructured — LLM required** | LLM extracts rules for treating recent acquisitions and dispositions on a pro forma basis when computing covenant ratios. Example: "EBITDA of any acquired entity may be included on a pro forma basis if the acquisition closed within the trailing twelve-month period." These rules can materially increase Covenant EBITDA for acquisitive companies. |
+| **Equity Cure Rights** | F2, F3 | Credit Agreement — Financial Covenants section | **Unstructured — LLM required** | LLM extracts whether company has the right to inject equity to cure a covenant breach, the mechanics (amount required, timing, frequency limits), and whether cure has been used in prior periods. Flag if cure has been used: "equity cure previously exercised — repeat use may be restricted; verify remaining cure capacity." |
+| **Incurrence Covenant Threshold** | F1 (informational) | Indenture (Exhibit 4.x) + Debt Footnote | **Unstructured — LLM required** | High-yield bond indentures only. LLM extracts fixed charge coverage ratio threshold for debt incurrence test. Determines whether company can issue additional debt under the general basket. Flag clearly as incurrence (not maintenance) — does not trigger acceleration. Current ratio vs threshold indicates remaining debt capacity. |
+| **Springing Covenant Trigger Level** | F1, F3 | Credit Agreement + Debt Footnote | **Unstructured — LLM required** | LLM extracts the availability level at which the springing covenant activates. Example: "this covenant is only tested when revolver availability falls below $50 million." Store trigger level separately from the covenant threshold itself. Daily monitoring: if revolver availability approaches trigger level, pre-flag as "springing covenant risk — availability at [X]% of trigger level." |
+| **Forward EBITDA Projection** | F3 | MD&A — Liquidity and Capital Resources | **Unstructured — LLM required** | LLM extracts management guidance on expected EBITDA or FCF if disclosed. If not disclosed: system uses trailing twelve-month EBITDA as base case. Flag all projections: "forward EBITDA based on [management guidance / TTM run-rate]." |
+| **Covenant Headroom — Basic** (derived F1) | F1 | Derived from LLM threshold + structured ratio | **Hybrid — unstructured threshold + structured ratio** | Headroom = Covenant Threshold − Current Ratio (maximum covenants) or Current Ratio − Covenant Threshold (minimum covenants). If either input null → headroom null. Computation is deterministic once threshold is extracted. |
+| **Covenant Headroom — Adjusted** (derived F2) | F2 | Derived from LLM covenant definition + structured inputs | **Hybrid — extensive unstructured inputs** | Headroom = Covenant Threshold − Covenant Leverage (using Covenant EBITDA and Covenant Net Debt). Requires full addback computation. All addback amounts sourced from XBRL where tagged (restructuring: `us-gaap:RestructuringCharges`; SBC: `us-gaap:ShareBasedCompensation`) or LLM where not tagged. |
+| **Forward Stress Test Results** (derived F3) | F3 | Derived from all prior inputs + scenarios | **Hybrid — all inputs combined** | Scenario outputs are deterministic computations once all inputs are established. The inputs themselves are the unstructured bottleneck. Each scenario result stored separately with scenario label, assumption set, and breach flag. |
+
+---
+
+**Quick Reference — Structured vs Unstructured Summary**
+
+| Category | Items | Method | Phase |
+|---|---|---|---|
+| **Fully structured (reused from prior metrics)** | Current leverage, coverage, liquidity, capex | XBRL — already extracted | Phase 2 (proxy only) / Phase 3 |
+| **Fully unstructured — Debt Footnote LLM** | Covenant thresholds (all types), compliance affirmation, breach disclosure, waiver, step-down schedule, voluntary headroom, testing frequency | LLM — Debt Footnote | Phase 3 |
+| **Fully unstructured — Credit Agreement LLM** | Covenant EBITDA definition, addback list, addback cap, Net Debt definition, pro forma rules, equity cure rights, springing covenant trigger | LLM — Exhibit 10.x | Phase 3 |
+| **Fully unstructured — Indenture LLM** | Incurrence covenant threshold | LLM — Exhibit 4.x | Phase 3 |
+| **Fully unstructured — MD&A LLM** | Voluntary headroom disclosure, forward EBITDA guidance | LLM — MD&A section | Phase 3 |
+| **Hybrid (unstructured threshold + structured ratio)** | Basic headroom computation, adjusted headroom computation, forward stress test | LLM threshold + XBRL ratio → deterministic computation | Phase 3 |
+| **XBRL tagged addback components** | Restructuring charges, SBC, D&A, pension contributions | XBRL — already extracted for prior metrics | Phase 3 (reused) |
+
+---
+
+**Key Difference From All Prior Metrics**
+
+Every prior metric has at least one Formula 1 output that is fully structured from XBRL with no LLM dependency. Covenant Headroom has no such output. The minimum viable computation — basic headroom — requires at minimum one LLM extraction (the covenant threshold) that cannot be sourced from any structured data. This makes Covenant Headroom the only metric in the spec that is entirely dependent on LLM extraction for its primary analytical output and the only metric with no Phase 2 structured equivalent beyond the proxy approach of monitoring whether ratios cross market-convention covenant levels.
+
+The Phase 2 proxy approach (flagging when leverage exceeds 5.5x or coverage falls below 2.0x as approximate covenant breach signals) provides a rough directional signal but will produce both false positives (companies with covenants above 5.5x) and false negatives (companies with covenants below 5.5x). It should be clearly labeled in all Phase 2 outputs as a proxy, not a covenant headroom computation.
+
+
+## Extraction Fallback Logic — Covenant Headroom Metric
+
+---
+
+### Design Principles
+
+Same four universal rules apply, plus five additional rules specific to Covenant Headroom:
+
+**Rule 1 — Never substitute zero for a missing input.** A missing covenant threshold does not mean no covenant exists. Mark null and escalate.
+
+**Rule 2 — Try every fallback before giving up.** Debt Footnote → Credit Agreement → MD&A → prior filing → proxy. Exhaust all sources before declaring failure.
+
+**Rule 3 — Log what you used.** Every headroom figure records which document was the source of the threshold and which formula version was applied.
+
+**Rule 4 — Never compute headroom against an assumed threshold.** Do not default to industry-average covenant levels. A 5.5x assumed leverage covenant for a company that actually has a 4.0x covenant would produce dangerously misleading headroom. Null is always safer than an assumed value.
+
+**Rule 5 — Covenant breach disclosure overrides all other logic.** If any filing contains language indicating a covenant breach, waiver, or amendment, this triggers an immediate Critical alert before any headroom computation. Do not attempt to compute headroom after a breach is detected — the ratio comparison is irrelevant once the legal event has occurred.
+
+**Rule 6 — Maintenance vs incurrence distinction is mandatory.** Extracting a covenant threshold without correctly classifying it as maintenance or incurrence produces a fundamentally misleading output. A maintenance coverage covenant of 2.0x is a default trigger. An incurrence coverage covenant of 2.0x is a borrowing constraint. The system must never conflate the two.
+
+**Rule 7 — Credit agreement version control is critical.** The most recent amendment to the credit agreement supersedes all prior versions. If the system uses an outdated threshold from a prior credit agreement version — without applying subsequent amendments — it will compute headroom against the wrong number. Every extracted threshold must be tagged with the date of the credit agreement version from which it was sourced, and the system must check for amendments since that date.
+
+**Rule 8 — The Phase 2 proxy is clearly labeled and never upgraded.** The proxy approach (flagging leverage > 5.5x or coverage < 2.0x) is an interim measure only. It must be labeled "proxy — actual covenant terms not yet extracted" on every output. It must never be silently upgraded to appear as if actual covenant terms were used. When Phase 3 LLM extraction produces actual terms, the proxy is replaced — not supplemented — and the output label updated.
+
+---
+
+### Pre-Extraction Step — Covenant Existence Check
+
+Before attempting any threshold extraction, the system must first establish whether financial maintenance covenants exist for this issuer. Not all debt carries maintenance covenants.
+
+```
+Step 0 — Covenant existence screening:
+
+Check issuer's debt profile (from Debt Maturity
+Wall extraction):
+   Revolving credit facility: almost always has
+   maintenance covenants → proceed to extraction
+   Term loan A (amortising): almost always has
+   maintenance covenants → proceed
+   Term loan B (leveraged): usually has maintenance
+   covenants but may be "covenant-lite" → check
+   High-yield bonds: almost never have maintenance
+   covenants → extract incurrence covenants only;
+   flag: "high-yield bond issuer — maintenance
+   covenants unlikely; incurrence covenants extracted"
+   Investment-grade revolving facility: often has
+   maintenance covenants but may be looser →
+   proceed with lower urgency
+
+"Covenant-lite" detection:
+   LLM reads Debt Footnote for language indicating:
+   "covenant-lite," "cov-lite," "no financial
+   maintenance covenants," or absence of any
+   covenant compliance statement.
+   If covenant-lite confirmed:
+      Flag: "covenant-lite facility — no financial
+      maintenance covenants; acceleration risk from
+      financial ratios absent; incurrence covenants
+      only"
+      Skip maintenance covenant extraction
+      Proceed to incurrence covenant extraction only
+      This is important context — covenant-lite
+      issuers have more operational flexibility
+      but lenders have less protection
+```
+
+---
+
+### Input 1 — Covenant Thresholds (All Types)
+
+**Primary path — Debt Footnote LLM extraction:**
+
+```
+Step 1 — LLM reads Debt Footnote covenant section.
+          Target language patterns:
+          "not to exceed [X.Xx] to 1.00"
+          "not less than [X.Xx] to 1.00"
+          "maintain a [ratio name] of at least [X.Xx]"
+          "maximum [ratio name] of [X.Xx]"
+          "minimum [amount] of $[X] million"
+
+          For each covenant found, extract:
+          {
+            "covenant_type": "leverage/coverage/
+                             liquidity/capex/other",
+            "covenant_class": "maintenance/incurrence",
+            "threshold_value": X.Xx or $X million,
+            "threshold_direction": "maximum/minimum",
+            "ratio_name_as_stated": "exact name in filing",
+            "testing_frequency": "quarterly/semi-annual/
+                                  annual/continuous",
+            "effective_date": "YYYY-MM-DD",
+            "source_document": "Debt Footnote",
+            "source_quote": "verbatim sentence from filing",
+            "compliance_confirmed": true/false/null,
+            "breach_disclosed": true/false
+          }
+
+Step 2 — Verify threshold against compliance
+          statement if present:
+          If company discloses actual ratio AND
+          threshold in the same table or sentence:
+          Cross-check: extracted threshold should
+          match disclosed threshold exactly.
+          If mismatch: flag and use disclosed figure
+          as authoritative.
+
+Step 3 — Check for step-down schedule:
+          LLM looks for language like:
+          "reducing to [X.Xx] on [date]"
+          "stepping down to [X.Xx] as of [quarter]"
+          Extract array:
+          [{"effective_date": "YYYY-MM-DD",
+            "threshold": X.Xx}, ...]
+          Flag if step-down within 4 quarters:
+          "covenant step-down approaching [date] —
+          headroom will narrow by [X.Xx]x at step-down
+          even if financial performance is unchanged"
+
+Step 4 — If Debt Footnote yields partial or no results:
+          Proceed to Credit Agreement extraction (Step 5)
+```
+
+**Secondary path — Credit Agreement LLM extraction:**
+
+```
+Step 5 — Identify most recent credit agreement version:
+          Check 10-K exhibit index for Exhibit 10.x
+          containing "Credit Agreement"
+          Check 8-K Item 1.01 filings since
+          credit agreement date for amendments
+          Use most recent version — flag document
+          date: "threshold from Credit Agreement
+          dated [date], Amendment No. [X] dated [date]"
+
+Step 6 — LLM reads Financial Covenants section:
+          Typically Section 7.11 or Section 6.11
+          or titled "Financial Covenants"
+          Extract same fields as Step 1
+          Additionally extract:
+          Full ratio definition (numerator and
+          denominator as defined in agreement)
+
+Step 7 — LLM reads Definitions section for
+          Consolidated EBITDA definition:
+          (Formula 2 only — not required for F1)
+          Returns structured addback list:
+          {
+            "starting_point": "GAAP net income /
+                               GAAP EBITDA / other",
+            "addbacks": [
+              {"item": "restructuring charges",
+               "cap": null,
+               "notes": "no cap specified"},
+              {"item": "non-recurring charges",
+               "cap": "25% of Consolidated EBITDA",
+               "notes": "capped addback"},
+              {"item": "stock-based compensation",
+               "cap": null,
+               "notes": "uncapped"},
+              ...
+            ],
+            "look_back_period": "trailing twelve months",
+            "addback_cap_aggregate":
+               "25% of pre-addback EBITDA",
+            "source_document": "Credit Agreement
+                                 dated [date]",
+            "confidence": "high/medium/low"
+          }
+
+Step 8 — If Credit Agreement not publicly filed:
+          Flag: "credit agreement not publicly filed —
+          threshold from Debt Footnote only; addback
+          list unavailable; Formula 2 not computable"
+          Proceed with Formula 1 only
+```
+
+**Tertiary path — MD&A voluntary disclosure:**
+
+```
+Step 9 — LLM reads MD&A Liquidity and Capital
+          Resources section for explicit headroom
+          disclosure:
+          Look for: actual ratio disclosed alongside
+          covenant threshold in same sentence or table.
+          If found: extract both actual ratio and
+          threshold; compute headroom from MD&A figures
+          Store as "management-disclosed" separately
+          from system-computed.
+          Flag if management figures diverge from
+          system computation by >10%.
+
+Step 10 — Check prior filing for unchanged covenant:
+           If current filing's Debt Footnote contains
+           no covenant threshold but prior filing did:
+           Check whether credit agreement has been
+           amended since prior filing.
+           If no amendment detected:
+              Use prior filing threshold with flag:
+              "threshold from [prior filing date] —
+              no amendment detected; verify unchanged"
+           If amendment detected but new threshold
+           not extractable:
+              Set threshold = null
+              Flag: "credit agreement amended —
+              prior threshold superseded; new threshold
+              not extracted; headroom computation
+              suspended pending manual review"
+```
+
+**Failure path:**
+
+```
+Step 11 — If all paths return null for threshold:
+           Set Threshold = null
+           Set Headroom = null
+           Flag: "covenant threshold not extracted
+           from any available source"
+
+           Apply Phase 2 proxy ONLY if in Phase 2:
+           Proxy_Flag = true if:
+             Current Leverage > 5.5x (proxy for
+             typical leveraged loan covenant level)
+             OR Current Coverage < 2.0x
+           Flag prominently:
+           "PROXY ALERT — actual covenant terms
+           not extracted; alert based on market-
+           convention threshold approximation only;
+           actual covenant may differ materially"
+
+           Do NOT apply proxy in Phase 3 after
+           LLM extraction has been attempted —
+           a failed Phase 3 extraction should
+           result in null, not a proxy fallback
+```
+
+---
+
+### Input 2 — Addback Computation (Formula 2)
+
+```
+Once Covenant EBITDA definition extracted:
+
+For each addback item in extracted list:
+
+Step 1 — Identify XBRL tag for this addback:
+   Restructuring: us-gaap:RestructuringCharges
+   SBC: us-gaap:ShareBasedCompensation
+   D&A: us-gaap:DepreciationDepletionAndAmortization
+   Pension: us-gaap:PensionContributions
+   Non-cash impairment: us-gaap:AssetImpairmentCharges
+
+Step 2 — If XBRL tag available and non-null:
+   Use XBRL value for this addback item.
+   Log: "addback [item] from XBRL tag [tag]"
+
+Step 3 — If XBRL tag null or addback not
+   covered by a standard tag:
+   LLM extracts from income statement,
+   cash flow statement, or relevant footnote.
+   Log: "addback [item] from LLM extraction"
+
+Step 4 — Apply addback cap if present:
+   Capped_Addback = min(raw_addback, cap_amount)
+   If raw addback exceeds cap:
+      Flag: "addback [item] capped at [cap amount] —
+      full amount of $X excluded from Covenant EBITDA;
+      $Y addback capacity consumed at cap"
+
+Step 5 — Check aggregate addback cap:
+   If aggregate cap present (e.g. 25% of pre-addback
+   EBITDA):
+      Total_Capped_Addbacks = sum of all capped addbacks
+      Cap_Limit = GAAP_EBITDA × cap_percentage
+      If Total_Capped_Addbacks > Cap_Limit:
+         Apply cap to total:
+         Allowed_Addbacks = Cap_Limit
+         Flag: "aggregate addback cap binding —
+         total addbacks of $X capped at $Y (Z% of
+         pre-addback EBITDA); cap is [W]% utilised"
+      If Total_Capped_Addbacks approaching cap:
+         Flag: "aggregate addback cap [X]% utilised —
+         [Y]% remaining; further EBITDA deterioration
+         will flow through fully to Covenant Leverage
+         once cap is fully consumed"
+
+Step 6 — Compute Covenant EBITDA:
+   Covenant EBITDA =
+       GAAP EBITDA
+     + Sum of allowed addbacks
+     (after individual and aggregate caps)
+
+Step 7 — Compute divergence:
+   Divergence = Covenant EBITDA − GAAP EBITDA
+   Divergence % = Divergence / GAAP EBITDA × 100
+   Flag if > 20%: "material EBITDA addback —
+   Covenant EBITDA exceeds GAAP EBITDA by [X]%;
+   headline leverage understates covenant leverage
+   gap"
+   Flag if > 40%: "very large addback — verify
+   individual items; addback magnitude may
+   indicate earnings quality concern"
+```
+
+---
+
+### Input 3 — Headroom Computation
+
+```
+Basic Headroom (Formula 1):
+
+For maximum covenants (leverage, capex):
+   Headroom_Abs = Threshold − Current_Ratio
+   Headroom_Pct = Headroom_Abs / Threshold × 100
+   If Headroom_Abs < 0: BREACH — immediate Critical alert
+
+For minimum covenants (coverage, liquidity):
+   Headroom_Abs = Current_Ratio − Threshold
+   Headroom_Pct = Headroom_Abs / Threshold × 100
+   If Headroom_Abs < 0: BREACH — immediate Critical alert
+
+Null propagation:
+   If Threshold null → Headroom null
+   If Current_Ratio null → Headroom null
+   If both non-null → compute
+
+EBITDA cushion (leverage covenant only):
+   EBITDA_for_breach = Net_Debt / Covenant_Threshold
+   EBITDA_Cushion = Current_EBITDA − EBITDA_for_breach
+   EBITDA_Cushion_Pct =
+       EBITDA_Cushion / Current_EBITDA × 100
+   This translates the ratio headroom into a dollar
+   amount of EBITDA the company can afford to lose
+   before breaching — more intuitive than ratio alone.
+   Negative cushion = breach already occurred.
+
+Adjusted Headroom (Formula 2):
+   Same computation as above but using:
+   Covenant_Leverage instead of GAAP Leverage
+   (Covenant Net Debt / Covenant EBITDA)
+   Covenant_Threshold (same as Formula 1)
+
+Forward Headroom (Formula 3):
+   For each scenario:
+   Forward_Headroom(scenario) =
+       Threshold(applicable_date) −
+       Projected_Ratio(scenario, date)
+   Where Threshold(date) reflects step-downs
+   and Projected_Ratio reflects scenario assumptions
+```
+
+---
+
+### Input 4 — Covenant Breach and Waiver Detection
+
+This runs independently of and takes priority over all headroom computations. It is a keyword-based scan, not a ratio comparison.
+
+```
+Step 1 — Keyword scan across all filing sections:
+   Debt Footnote, MD&A, Auditor's Report,
+   Going Concern footnote, Subsequent Events
+   footnote, Risk Factors
+
+   Breach keywords:
+   "not in compliance"
+   "covenant violation"
+   "event of default"
+   "technical default"
+   "failed to comply"
+   "breach of covenant"
+
+   Waiver keywords:
+   "obtained a waiver"
+   "waiver agreement"
+   "forbearance agreement"
+   "amendment and waiver"
+   "lender consent"
+
+   Amendment keywords (may indicate prior breach
+   or proactive restructuring):
+   "Amendment No. [X]"
+   "amended and restated"
+   "covenant relief"
+   "covenant reset"
+   "relaxed the financial covenant"
+   "increased the maximum permitted"
+
+Step 2 — If breach keyword found:
+   IMMEDIATE CRITICAL ALERT
+   Extract:
+   Which covenant was breached
+   Date of breach
+   Whether waiver was obtained (and expiry)
+   Whether amendment replaced waiver
+   Store as permanent record even after
+   waiver or amendment resolves the breach
+
+Step 3 — If waiver keyword found without
+   explicit breach language:
+   Stress alert — waiver implies breach occurred
+   Flag: "waiver language detected — breach
+   implied; extract waiver details and
+   monitor for covenant compliance going forward"
+
+Step 4 — If amendment keyword found:
+   Extract new covenant terms
+   Update stored threshold with new value
+   Flag: "covenant amended — threshold updated;
+   prior headroom computations superseded"
+   Check whether amendment tightens or loosens
+   the covenant:
+   Loosened: "covenant relief obtained —
+   negative signal; lenders conceded terms"
+   Tightened: "covenant tightened — monitor
+   carefully; new threshold may reduce headroom"
+```
+
+---
+
+### Cross-Level Validation Rules
+
+**Check 1 — Threshold reasonableness**
+```
+After extracting any covenant threshold:
+Compare to market convention for this issuer type:
+   Investment-grade revolver: leverage threshold
+   typically 3.0x–4.5x if present at all
+   BB-rated leveraged loan: typically 4.5x–6.5x
+   B-rated leveraged loan: typically 5.5x–7.5x
+   Coverage covenant: typically 1.75x–3.0x minimum
+
+If extracted threshold falls outside these ranges:
+   Flag: "extracted covenant threshold of [X.Xx]x
+   appears unusual for [issuer type] — verify
+   extraction accuracy; possible definition or
+   extraction error"
+   Do NOT override — flag only; proceed with
+   extracted value
+```
+
+**Check 2 — Headroom vs filing-date ratio consistency**
+```
+If company discloses both current ratio AND headroom
+in the same filing:
+   Verify: Disclosed_Ratio + Headroom ≈ Threshold
+   If inconsistent:
+      Flag: "disclosed ratio and headroom do not
+      reconcile to extracted threshold — verify
+      extraction; using disclosed figures as
+      authoritative"
+      Use management-disclosed figures and log
+      system computation as secondary
+```
+
+**Check 3 — Step-down proximity alert**
+```
+For any covenant with a step-down schedule:
+   Days_to_Step_Down = step_down_date − filing_date
+   Headroom_after_step_down =
+       New_Threshold − Current_Ratio
+   If Headroom_after_step_down < 0:
+      Flag: "step-down on [date] will result in
+      immediate covenant breach at current
+      ratio — breach timing: [days] days"
+   If Headroom_after_step_down < 10% of
+   New_Threshold:
+      Flag: "step-down on [date] will reduce
+      headroom to [X]% — very thin post-step-
+      down headroom"
+```
+
+**Check 4 — Addback cap utilisation trend**
+```
+If addback cap present:
+   Compare cap utilisation across last three periods:
+   If utilisation increasing each period:
+      Flag: "addback cap utilisation increasing —
+      [prior-2]: X%, [prior-1]: Y%, [current]: Z%;
+      approaching binding cap; future EBITDA
+      deterioration will not be offsettable
+      through addbacks once cap is reached"
+```
+
+**Check 5 — Multi-covenant breach proximity**
+```
+If issuer has multiple maintenance covenants:
+   Check whether multiple covenants are
+   simultaneously approaching their thresholds:
+   If two or more covenants at < 15% headroom:
+      Flag: "multiple covenant stress —
+      [covenant 1] at [X]% headroom and
+      [covenant 2] at [Y]% headroom simultaneously;
+      elevated breach risk across credit facility"
+   This multi-covenant stress is more severe than
+   single covenant stress because it reduces
+   the likelihood that the company can fix one
+   ratio without inadvertently worsening another
+```
+
+---
+
+### Audit Log Output Format (per company, per period)
+
+```
+{
+  "ticker": "RAD",
+  "period": "2023-03-04",
+  "filing": "10-K",
+
+  "covenant_existence": {
+    "maintenance_covenants_present": true,
+    "covenant_lite": false,
+    "source": "Debt Footnote — Note 7"
+  },
+
+  "covenants": [
+    {
+      "covenant_type": "leverage",
+      "covenant_class": "maintenance",
+      "threshold": 5.50,
+      "threshold_direction": "maximum",
+      "testing_frequency": "quarterly",
+      "step_down": [
+        {"date": "2024-03-01", "threshold": 5.25},
+        {"date": "2024-09-01", "threshold": 5.00}
+      ],
+      "source_document": "Debt Footnote — Note 7",
+      "source_quote": "The credit agreement requires
+                       us to maintain a Consolidated
+                       Net Leverage Ratio not to exceed
+                       5.50 to 1.00",
+      "credit_agreement_version": "Fourth Amended and
+                                   Restated Credit
+                                   Agreement dated
+                                   2021-01-15",
+      "compliance_confirmed": false,
+      "breach_disclosed": true,
+      "waiver_obtained": true,
+      "waiver_details": "Waiver obtained January 2023;
+                         expires June 2023"
+    },
+    {
+      "covenant_type": "coverage",
+      "covenant_class": "maintenance",
+      "threshold": 1.75,
+      "threshold_direction": "minimum",
+      "testing_frequency": "quarterly",
+      "step_down": null,
+      "source_document": "Debt Footnote — Note 7",
+      "compliance_confirmed": false,
+      "breach_disclosed": true,
+      "waiver_obtained": true
+    }
+  ],
+
+  "formula_1_headroom": [
+    {
+      "covenant_type": "leverage",
+      "current_ratio": 10.2,
+      "threshold": 5.50,
+      "headroom_absolute": -4.70,
+      "headroom_pct": -85.5,
+      "ebitda_cushion_pct": null,
+      "status": "BREACH"
+    },
+    {
+      "covenant_type": "coverage",
+      "current_ratio": -0.69,
+      "threshold": 1.75,
+      "headroom_absolute": -2.44,
+      "headroom_pct": -139.4,
+      "status": "BREACH"
+    }
+  ],
+
+  "formula_2_headroom": null,
+  "formula_2_note": "Covenant EBITDA definition
+                     extraction deferred — breach
+                     already confirmed; Formula 2
+                     not required for alert",
+
+  "alerts": [
+    "CRITICAL — leverage covenant breach disclosed;
+     waiver obtained January 2023 expiring June 2023",
+    "CRITICAL — coverage covenant breach disclosed;
+     same waiver",
+    "CRITICAL — waiver expiry June 2023 represents
+     near-term covenant cliff; breach will recur
+     unless financial performance improves or
+     permanent amendment obtained"
+  ],
+
+  "flags": [
+    "Step-down schedule: leverage threshold reduces
+     to 5.25x in March 2024 and 5.00x in September
+     2024 — moot given current breach but would
+     tighten further post-waiver if performance
+     does not recover",
+    "Breach disclosure confirmed in both Debt
+     Footnote and Auditor's Report"
+  ],
+
+  "nulls": ["formula_2_covenant_ebitda",
+            "formula_3_stress_test"]
+}
+```
+
+This Rite Aid example confirms that the covenant breach detection logic would have generated Critical alerts from the fiscal 2023 10-K — consistent with all prior metric validations and with the October 2023 bankruptcy outcome.
+
 
