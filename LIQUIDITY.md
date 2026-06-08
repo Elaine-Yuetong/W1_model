@@ -1248,6 +1248,639 @@ while Current Ratio is stable:
 ```
 
 ---
+## Stress Threshold — Liquidity
+
+---
+
+### Structural Difference From Prior Metrics
+
+Leverage, coverage, and FCF thresholds are calibrated to S&P's financial risk profile tables or market convention ratios that describe a company's long-term financial health trajectory. Liquidity thresholds are different in one fundamental way: they describe near-term survival capacity, not long-term trajectory. This means the alert logic is more binary and more urgent than for any other metric in this spec.
+
+A leverage ratio of 6.5x is alarming but does not mean the company defaults next quarter. A cash ratio of 0.03x with a $500M debt maturity due in 60 days may mean exactly that. The threshold framework for liquidity must reflect this difference — lower severity alerts are still useful for early warning, but the upper end of the alert scale is more operationally urgent than for any other metric.
+
+---
+
+### Five Threshold Dimensions
+
+Liquidity stress thresholds operate across five dimensions simultaneously corresponding to the four ratio outputs and the days cash on hand supplementary metric. All five must be evaluated together.
+
+---
+
+**Dimension 1 — Current Ratio**
+
+Source: S&P Corporate Methodology and market convention. S&P treats a current ratio below 1.0x as a negative qualitative factor in its liquidity descriptor assessment. Academic literature (Altman 1968; Ohlson 1980) consistently identifies current ratio as one of the strongest predictors of financial distress in multivariate default models.
+
+| Current Ratio | Financial Risk Interpretation | Alert Level |
+|---|---|---|
+| ≥ 2.0x | Strong — ample current asset buffer | No alert |
+| 1.5x – 2.0x | Adequate — comfortable margin | No alert — monitor trend |
+| 1.2x – 1.5x | Acceptable — thin but manageable | Watch |
+| 1.0x – 1.2x | Weak — minimal buffer | Flag |
+| 0.8x – 1.0x | Below parity — current liabilities exceed current assets | Stress |
+| < 0.8x | Severely below parity | Critical |
+
+**Formula 1 calibration note:** Current ratio uses balance sheet book values for current assets including inventory at cost. For companies in distress, inventory may be worth significantly less than book value if liquidated quickly. The current ratio therefore overstates liquidity quality for inventory-heavy companies under stress. Apply the quick ratio threshold in parallel — the more conservative of the two governs the alert level.
+
+---
+
+**Dimension 2 — Quick Ratio**
+
+Source: Same as current ratio. The quick ratio is the more analytically reliable measure for credit purposes because it excludes inventory which may not be quickly convertible.
+
+| Quick Ratio | Financial Risk Interpretation | Alert Level |
+|---|---|---|
+| ≥ 1.0x | Strong — liquid assets cover all current liabilities | No alert |
+| 0.8x – 1.0x | Adequate — slight shortfall offset by operating cash generation | Watch |
+| 0.6x – 0.8x | Below adequate — meaningful reliance on inventory conversion | Flag |
+| 0.4x – 0.6x | Weak — significant reliance on inventory or new financing | Stress |
+| < 0.4x | Severely weak — liquid assets deeply insufficient | Critical |
+
+**Sector adjustment — retail and manufacturing:** These sectors structurally operate with quick ratios below 1.0x because their business model depends on inventory turnover. Apply a 0.2x downward adjustment to all thresholds for confirmed retail and manufacturing issuers:
+
+| Sector Adjustment | Adjusted Quick Ratio Thresholds |
+|---|---|
+| Retail / Manufacturing Watch | < 0.6x (vs standard 0.8x) |
+| Retail / Manufacturing Flag | < 0.4x (vs standard 0.6x) |
+| Retail / Manufacturing Stress | < 0.3x (vs standard 0.4x) |
+| Retail / Manufacturing Critical | < 0.2x (vs standard 0.4x) |
+
+---
+
+**Dimension 3 — Cash Ratio**
+
+Source: Market convention for distressed credit analysis. No single published threshold table — the ranges below reflect investment banking and distressed debt practice.
+
+| Cash Ratio | Financial Risk Interpretation | Alert Level |
+|---|---|---|
+| ≥ 0.5x | Strong cash position — significant buffer | No alert |
+| 0.3x – 0.5x | Adequate — reasonable cash relative to current liabilities | No alert — monitor trend |
+| 0.15x – 0.3x | Below adequate — limited cash buffer | Watch |
+| 0.08x – 0.15x | Weak — minimal cash relative to obligations | Flag |
+| 0.03x – 0.08x | Very weak — cash nearly exhausted relative to obligations | Stress |
+| < 0.03x | Critical — essentially no cash buffer | Critical |
+
+**Important context:** Most investment-grade companies operate with cash ratios in the 0.10x–0.30x range and rely on operating cash generation and revolving credit facilities rather than large cash balances to meet obligations. A low cash ratio is not automatically alarming for a company with strong FCF and an undrawn revolver. The cash ratio alert should always be cross-referenced with FCF and Available Liquidity Coverage before escalating. A cash ratio alert combined with negative FCF and a drawn revolver is critical. A cash ratio alert combined with positive FCF and an undrawn revolver may not require escalation beyond Watch.
+
+---
+
+**Dimension 4 — Available Liquidity Coverage**
+
+Source: Moody's Speculative Grade Liquidity (SGL) rating framework and S&P Liquidity Descriptor framework. Both agencies treat available liquidity relative to near-term maturities as the primary quantitative liquidity metric. The thresholds below are consistent with the SGL and liquidity descriptor frameworks.
+
+*Phase 2 (cash only — revolver excluded):*
+
+| Available Liquidity Coverage (cash only) | Interpretation | Alert Level |
+|---|---|---|
+| ≥ 2.0x | Cash alone covers near-term debt twice over | No alert |
+| 1.5x – 2.0x | Cash comfortably covers near-term debt | No alert — monitor trend |
+| 1.0x – 1.5x | Cash covers near-term debt with thin margin | Watch |
+| 0.5x – 1.0x | Cash insufficient to cover near-term debt alone | Flag — revolver dependency confirmed |
+| 0.2x – 0.5x | Cash severely insufficient | Stress |
+| < 0.2x | Cash almost non-existent relative to near-term debt | Critical |
+
+*Phase 3 (full — revolver included):*
+
+| Available Liquidity Coverage (cash + revolver) | S&P Descriptor Equivalent | Alert Level |
+|---|---|---|
+| ≥ 2.0x | Exceptional / Strong | No alert |
+| 1.5x – 2.0x | Strong | No alert — monitor trend |
+| 1.2x – 1.5x | Adequate | Watch |
+| 1.0x – 1.2x | Less than Adequate | Flag |
+| < 1.0x | Weak | Stress |
+| < 0.5x | Weak — acute | Critical |
+
+**Phase 2 flag:** All Available Liquidity Coverage alerts generated in Phase 2 must be flagged with: "alert based on cash only — revolver not included; actual available liquidity may be higher; verify revolver availability before escalating." Do not suppress the alert — flag it but note the limitation.
+
+---
+
+**Dimension 5 — Days Cash on Hand**
+
+Source: Healthcare and non-profit financial analysis convention; adopted in distressed corporate credit analysis. Particularly relevant for companies with thin or negative FCF margins.
+
+| Days Cash on Hand | Interpretation | Alert Level |
+|---|---|---|
+| ≥ 90 days | Strong — more than one quarter of operations fundable from cash | No alert |
+| 60 – 90 days | Adequate — two months of operational runway | No alert — monitor trend |
+| 30 – 60 days | Below adequate — less than two months of runway | Watch |
+| 14 – 30 days | Weak — two to four weeks of operational runway | Flag |
+| 7 – 14 days | Very weak — one to two weeks | Stress |
+| < 7 days | Critical — less than one week of cash to fund operations | Critical — immediate escalation |
+
+**Context dependency:** Days cash on hand is most meaningful for companies with negative or near-zero FCF where operating cash generation cannot be relied upon to supplement the cash balance. For companies with strong positive FCF, a low days-cash figure is less alarming because operating cash inflows replenish the balance continuously. Cross-reference with FCF metric before escalating days-cash alerts.
+
+---
+
+### Combined Alert Trigger Rules
+
+The most severe alert across all five dimensions governs the overall liquidity alert level. Two additional combined rules apply:
+
+| Alert Level | Any of These Conditions | Action |
+|---|---|---|
+| **Watch** | Current ratio 1.2x–1.5x; OR Quick ratio 0.8x–1.0x (standard) / 0.6x–0.8x (retail/manufacturing); OR Cash ratio 0.15x–0.30x; OR Available liquidity coverage 1.0x–1.5x (Phase 2) / 1.2x–1.5x (Phase 3); OR Days cash 30–60 | Log; weekly review |
+| **Flag** | Current ratio 1.0x–1.2x; OR Quick ratio 0.6x–0.8x; OR Cash ratio 0.08x–0.15x; OR Available liquidity coverage 0.5x–1.0x (Phase 2) / 1.0x–1.2x (Phase 3); OR Days cash 14–30 | Generate alert; daily monitoring |
+| **Stress** | Current ratio 0.8x–1.0x; OR Quick ratio 0.4x–0.6x; OR Cash ratio 0.03x–0.08x; OR Available liquidity coverage 0.2x–0.5x (Phase 2) / < 1.0x (Phase 3); OR Days cash 7–14 | Immediate alert; escalate to analyst same day |
+| **Critical** | Current ratio < 0.8x; OR Quick ratio < 0.4x; OR Cash ratio < 0.03x; OR Available liquidity coverage < 0.2x (Phase 2) / < 0.5x (Phase 3); OR Days cash < 7; OR Zero available liquidity | Highest priority alert; cross-reference all metrics immediately |
+| **Trend Flag** | Any ratio deteriorating for 3 consecutive quarters regardless of absolute level | Alert regardless of band |
+| **Covenant Breach Imminent** | Available liquidity within 15% of any disclosed minimum liquidity covenant | Immediate escalation — covenant-liquidity feedback loop risk |
+| **Revolver Maturing** | Revolving credit facility maturity within 12 months (Phase 3) | Immediate flag — primary liquidity backstop at risk |
+| **Extraction Failure** | Current Liabilities null after all fallbacks | All ratios null; escalate to manual review |
+
+---
+
+**Combined Liquidity-FCF Rule:**
+When both a liquidity alert and a negative FCF alert are active simultaneously for the same issuer in the same quarter, escalate the combined signal to the next alert level. A company that is both illiquid and burning cash has no internal mechanism to restore liquidity — it is entirely dependent on external financing or asset sales.
+
+**Combined Liquidity-Maturity Rule:**
+When an Available Liquidity Coverage alert is active AND the Debt Maturity Wall metric shows maturities exceeding available liquidity within 12 months, escalate to Critical regardless of the individual dimensions. This is the combination most directly associated with near-term default.
+
+---
+
+### Sector Exceptions and Adjustments
+
+**Financial institutions:** Balance sheet liquidity ratios are not applicable in the same form — banks hold current liabilities (deposits) as their business model, producing structurally extreme leverage ratios that are meaningless under this framework. Flag for manual review. Do not apply these thresholds.
+
+**Utilities and regulated infrastructure:** These sectors operate with relatively low current ratios (often 0.8x–1.1x) because their stable, predictable operating cash flows mean they do not need to hold large liquid asset buffers. Apply the following adjustment: reduce all threshold boundaries by 0.2x for confirmed utility issuers. A current ratio of 0.9x for a utility is Watch rather than Stress.
+
+**Seasonal businesses (retail, agriculture, hospitality):** Current ratio and quick ratio fluctuate dramatically within the year. A retailer's current ratio in August (pre-holiday inventory build) will be far lower than in January (post-holiday cash collection). Always compare to the same quarter of the prior year rather than the sequential prior quarter. Flag when year-over-year same-quarter deterioration exceeds 0.3x on the current ratio.
+
+**Companies in planned investment cycles:** A company deliberately consuming liquidity to fund a capex programme may show deteriorating liquidity ratios without being in distress. The distinguishing feature is whether leverage and coverage are stable and FCF compression is accompanied by clear management guidance on investment cycle completion. Apply analyst judgment — flag but do not automatically escalate if investment cycle context is confirmed.
+
+---
+
+### Empirical Context and Backtest Anchor
+
+**Historical reference — Rite Aid:**
+Using the audit log figures validated above: Rite Aid fiscal 2023 current ratio = 1.13x (Watch), quick ratio = 0.42x (Stress — below 0.4x threshold for retail adjustment, Critical), cash ratio = 0.07x (Stress), days cash on hand = 4.2 days (Critical). The combined alert level would be Critical driven by days cash on hand and the retail-adjusted quick ratio. Available liquidity coverage without revolver = 1.13x (Watch for Phase 2 cash-only version). This confirms the liquidity metric would have generated a Critical alert for Rite Aid in fiscal 2023 — consistent with its October 2023 bankruptcy and with the stress signals already documented in the Leverage, Coverage, and FCF sections.
+
+**Historical reference — general empirical evidence:**
+Ohlson (1980) identified the current ratio as one of nine financial ratios with significant predictive power for corporate bankruptcy in a logistic regression model. His O-score model explicitly includes a working capital to total assets ratio and a current liabilities to current assets ratio — both of which are directly captured by the current and quick ratio thresholds above. More recent empirical work on leveraged loan defaults consistently identifies current ratio below 1.0x as a threshold above which default frequency increases materially, holding leverage and coverage constant.
+
+Moody's SGL rating data confirms that companies rated SGL-4 (weakest liquidity) default at rates approximately 8–10 times higher than SGL-1 companies within 12 months — directly validating the urgency of liquidity alerts relative to leverage and coverage alerts for near-term default prediction.
+
+**Phase 3 backtest validation targets:**
+
+| Metric | Target |
+|---|---|
+| Catch rate (any dimension at Flag or above) | ≥ 85% of known distressed cases flagged at Flag or above at least one quarter before credit event — higher than leverage/coverage because liquidity deteriorates faster near the event |
+| Lead time | Median lead time of ≥ 1 quarter between first liquidity flag and credit event — shorter than leverage/coverage because liquidity is a coincident-to-lagging indicator relative to those metrics but a leading indicator relative to the actual credit event |
+| Critical alert precision | ≥ 70% of Critical liquidity alerts should be followed by a credit event within 2 quarters — high precision requirement given the urgency of Critical alerts |
+| False positive rate | ≤ 25% of healthy issuers falsely flagged at Flag or above — slightly higher tolerance than leverage/coverage because sector-specific threshold adjustments need calibration |
+| Combined alert precision | ≥ 90% of cases where both liquidity Critical and FCF Critical alerts are active simultaneously should result in a credit event within 2 quarters |
+
+---
+
+## Signal Timing — Liquidity
+
+---
+
+### Classification
+
+**Coincident to lagging — the latest of the primary metrics, but the most urgent when it moves.**
+
+Liquidity is the only metric in this spec that operates on two completely different timescales simultaneously. In early and middle stages of corporate distress, liquidity ratios move slowly and lag behind FCF, coverage, and leverage deterioration — companies have cash reserves that absorb stress for multiple quarters before balance sheet liquidity ratios visibly deteriorate. In late-stage distress, liquidity can collapse within a single quarter — a debt maturity arrives, a covenant is breached, a revolver is pulled — and the system has almost no lead time before the credit event occurs.
+
+This dual nature means liquidity serves a different function in your system than the other metrics. FCF, coverage, and leverage are early warning indicators — they give you 2–6 quarters of lead time to identify and monitor a deteriorating credit. Liquidity is the confirmation indicator — when it deteriorates sharply, the credit event is no longer a future risk but an imminent reality. The two functions are complementary. The earlier metrics tell you a company is heading toward a cliff. The liquidity metric tells you it has reached the edge.
+
+---
+
+### The Absorption Phase and the Cliff Phase
+
+Understanding liquidity signal timing requires understanding how companies manage liquidity under stress. There are two distinct phases:
+
+**Phase A — The Absorption Phase (months −18 to −3 before credit event)**
+
+During this phase the company is experiencing financial stress — FCF is negative or compressing, EBITDA is declining, leverage is rising — but the liquidity ratios are relatively stable. The company is absorbing the stress through three mechanisms: drawing down cash reserves accumulated in better times, drawing on the revolving credit facility, and stretching payables. All three consume liquidity silently without immediately triggering deterioration in the balance sheet ratios your system monitors. The current ratio may even remain above 1.0x throughout this phase because current assets (including inventory and receivables) are still substantial even as cash depletes.
+
+During the Absorption Phase, the FCF, coverage, and leverage metrics are your primary signals. Liquidity ratios are providing false comfort — they appear stable while the underlying liquidity position is deteriorating. The signals visible in this phase are: declining cash balance quarter over quarter, increasing short-term borrowings (revolver draws), and working capital stretching. These are component-level signals within the liquidity metric rather than ratio-level signals. Your system should monitor these component trends separately from the ratio outputs.
+
+**Phase B — The Cliff Phase (months −3 to 0 before credit event)**
+
+The cliff arrives when the absorption mechanisms are exhausted. The revolver is fully drawn. Cash is nearly depleted. Payables cannot be stretched further without supplier action. At this point one of three triggering events typically occurs: a debt maturity arrives that the company cannot refinance, a covenant is breached triggering acceleration, or a supplier or lender pulls a facility. Any of these collapses the liquidity position within days to weeks — not quarters. The balance sheet ratios that were stable throughout the Absorption Phase deteriorate sharply in a single period.
+
+During the Cliff Phase the liquidity metric becomes the primary signal. FCF, leverage, and coverage are already at stress levels — they are confirming what is already known. The liquidity metric is now telling you how much time remains and whether a credit event is imminent.
+
+---
+
+### Three-Tier Timing Structure
+
+| Tier | Source | Data Quality | Lag After Quarter-End | Lead Before 10-Q | Use in System |
+|---|---|---|---|---|---|
+| **Tier 1 — Full recompute** | 10-Q / 10-K | Reviewed (10-Q) or audited (10-K); structured XBRL; Formula 1 computable | **+40 days** (large accelerated filer) | n/a | Primary liquidity ratios; triggers all alerts |
+| **Tier 2 — Early directional signal** | 8-K Item 2.02 earnings press release | Preliminary; unaudited; company may disclose cash balance and revolver availability; unstructured text | **+14 to +25 days** | **−15 to −25 days before 10-Q** | Cash balance and revolver availability if disclosed; Phase 3 only |
+| **Tier 3 — Real-time event trigger** | 8-K Items 2.03 / 2.04 / 1.01 / 8.01 (keyword filtered) | Event disclosure; no full balance sheet | **Within 4 business days** | Any time intra-quarter | Debt draws, maturity extensions, covenant waivers, revolver amendments — all are real-time liquidity signals |
+
+**Liquidity-specific note on Tier 2:** Unlike coverage and FCF where the press release rarely discloses the primary metric inputs directly, many companies — particularly investment-grade and high-yield issuers under investor scrutiny — voluntarily disclose cash balances and revolver availability in their earnings press releases. For these issuers, Tier 2 provides a genuine liquidity signal rather than just an indirect EBITDA-based estimate. In Phase 3, the LLM should specifically search Item 2.02 text for cash balance, revolver availability, and any commentary on liquidity position.
+
+**Liquidity-specific note on Tier 3:** Liquidity has more real-time event triggers than any other metric in this spec. The following 8-K events are direct liquidity signals that your system should monitor even in Phase 2 for issuers already flagged:
+
+```
+8-K events with direct liquidity implications:
+
+Item 1.01 — Entry into material agreement:
+   Keywords: "credit facility", "revolving credit",
+   "amendment", "waiver", "extension", "covenant relief"
+   Signal: revolver amendment may increase or decrease
+   available liquidity; waiver may prevent imminent
+   covenant breach
+
+Item 2.03 — Material debt creation:
+   Signal: new debt increases cash immediately
+   (temporary positive liquidity signal) but increases
+   future debt service obligations
+
+Item 2.04 — Debt acceleration / default:
+   Signal: AUTOMATIC CRITICAL ALERT
+   A triggered acceleration eliminates liquidity
+   by making debt immediately due
+
+Item 8.01 — Other events (keyword filtered):
+   Keywords: "liquidity", "cash", "revolver", "facility",
+   "covenant", "waiver", "amendment", "maturity",
+   "refinanc", "default"
+   Signal: companies sometimes voluntarily disclose
+   liquidity updates via 8.01 when not required
+   by a specific item — particularly for distressed
+   issuers managing investor relations around
+   a liquidity concern
+```
+
+---
+
+### The Staleness Problem Is Worst for Liquidity
+
+The 40-day filing lag affects liquidity more severely than any other metric because liquidity can change dramatically within a single quarter in ways that are invisible to your system until the next filing.
+
+**Scenario illustrating maximum staleness risk:**
+
+```
+Day 0 (Quarter-end, e.g. September 30):
+   10-Q will show: Cash = $800M, Revolver = $500M undrawn
+   Liquidity ratios: healthy — no alerts
+
+Day 15:
+   Company draws $400M on revolver to fund operations
+   Cash effectively = $800M + $400M drawn = still $800M cash
+   but revolver now $100M available
+   Available liquidity has fallen from $1.3B to $900M
+   INVISIBLE TO YOUR SYSTEM — no 8-K required if
+   revolver draw is not material at entity level
+
+Day 30:
+   Company misses a supplier payment
+   Working capital stress building
+   INVISIBLE — no filing required
+
+Day 40 (10-Q filing deadline):
+   10-Q filed showing:
+   Cash = $650M (depleted during quarter)
+   Short-term borrowings (revolver drawn) = $400M
+   Current liabilities increased
+   Liquidity ratios: deteriorated
+   YOUR SYSTEM SEES THIS — 40 days after quarter-end
+
+Net result: your system is seeing liquidity data that is
+40 days old on the best day. For a company entering the
+Cliff Phase, 40 days is enough time for a complete
+liquidity collapse to have occurred and partially reversed —
+or to have become irreversible.
+```
+
+**This staleness asymmetry is the most important signal timing limitation in the entire spec.** It means that for companies already in the Flag or Stress band on liquidity, the 40-day filing lag represents a meaningful blind spot. Your system's response should be heightened monitoring frequency — checking for 8-K triggers daily rather than waiting for the next quarterly filing.
+
+---
+
+### Component-Level Early Warning Signals
+
+Because ratio-level liquidity signals are lagging, the most valuable early warning from the liquidity metric comes from monitoring component trends that precede ratio deterioration. These are visible in the quarterly XBRL data and do not require LLM extraction:
+
+```
+Signal 1 — Cash balance declining for 3 consecutive quarters:
+   Flag even if current ratio remains healthy.
+   Indicates absorption phase — cash being consumed
+   while other current assets mask ratio stability.
+
+Signal 2 — Short-term borrowings increasing for
+   2 consecutive quarters while FCF is negative:
+   Flag — revolver draw pattern; company funding
+   operations from credit facility.
+   This is the most reliable Absorption Phase indicator.
+
+Signal 3 — Current portion of LT debt increasing
+   disproportionately:
+   Indicates approaching debt maturities being
+   reclassified to current — precursor to maturity
+   wall stress. Cross-reference Debt Maturity Wall
+   metric.
+
+Signal 4 — Current assets growing faster than revenue
+   while cash is stable or declining:
+   Indicates receivables or inventory build —
+   working capital trap developing.
+   Cross-reference FCF OCF/EBITDA conversion ratio.
+
+Signal 5 — Current liabilities growing faster than
+   current assets for 2 consecutive quarters:
+   Direct precursor to current ratio deterioration.
+   Flag before the ratio itself crosses a threshold.
+```
+
+These five component signals should be computed and stored alongside the four ratio outputs in every quarterly extraction. They provide 1–3 quarters of lead time over the ratio thresholds and are the liquidity metric's contribution to the early warning sequence.
+
+---
+
+### Comparison: Liquidity vs Other Metrics Signal Speed
+
+| Scenario | Liquidity Signal | FCF Signal | Coverage Signal | Leverage Signal | Earliest |
+|---|---|---|---|---|---|
+| Working capital deterioration | Lagging — 2–4 quarters behind cash flow | **Early — 1–2 quarters** | None initially | None initially | **FCF leads** |
+| Revolver draw acceleration | **Medium — component signal 1–2 quarters** | Coincident | None | Slight increase | **Liquidity component leads** |
+| Debt maturity reclassification to current | **Immediate — same quarter as reclassification** | None | None | None | **Liquidity leads** |
+| Cash depletion from operations | Medium — ratio deteriorates as cash falls | **Early — FCF negative precedes** | Medium | None directly | **FCF leads** |
+| Covenant breach | **Immediate — same period** | None directly | Coincident | Coincident | **Liquidity leads** |
+| Cliff phase collapse | **Immediate — single quarter** | Confirming | Confirming | Confirming | **Liquidity is the signal** |
+| Revolver pulled by lender | **Immediate — 8-K trigger** | None | None | None | **Liquidity leads — only metric that captures this** |
+
+**Key insight:** Liquidity leads only in two scenarios — debt maturity reclassification and the cliff phase collapse. In all other scenarios it lags or is coincident. This confirms that liquidity is a confirmation and late-stage indicator, not a general early warning indicator. Its value is in the right tail of the distress distribution — when other metrics have already been flagging for multiple quarters and the system needs to assess how close a credit event actually is.
+
+---
+
+### Updated Signal Timing Summary
+
+> **Signal Timing — Coincident to lagging in early distress; immediate and most urgent in late-stage distress.**
+>
+> Liquidity ratios absorb stress silently for 2–6 quarters through cash depletion, revolver draws, and payables stretching — during this Absorption Phase, FCF, coverage, and leverage are your primary signals and liquidity ratios provide false comfort. When the absorption mechanisms are exhausted the liquidity ratios enter the Cliff Phase and can collapse within a single quarter — at this point liquidity becomes the most urgent metric in the system and the other metrics are confirming signals.
+>
+> The 40-day filing lag is most damaging for liquidity of all the metrics because the Cliff Phase can complete within a single quarter. For issuers already at Flag or Stress on liquidity, monitor for 8-K triggers daily — particularly Items 2.04, 1.01 (credit facility amendments), and keyword-filtered 8.01 filings. These provide real-time liquidity signals that are unavailable for any other metric.
+>
+> Component-level signals — declining cash balance, increasing revolver draws, current liabilities growing faster than current assets — provide 1–3 quarters of lead time over ratio-level liquidity alerts and should be monitored as upstream signals in their own right. They are the liquidity metric's contribution to the early warning sequence alongside FCF compression and coverage deterioration.
+>
+> The combination of a liquidity Critical alert and a FCF Critical alert active simultaneously is the highest-confidence near-term default signal this system can generate from structured data alone. When both are active, the probability of a credit event within two quarters is high enough to warrant immediate escalation regardless of leverage and coverage levels.
 
 
+## Frequency — Liquidity
+
+---
+
+### Overview
+
+Liquidity shares the same six-channel update structure as all prior metrics. Filing deadlines, EDGAR availability rules, and the Phase 2 vs Phase 3 priority framework are identical — refer to the Leverage Frequency section for full channel definitions, 8-K filtering rules, and expected filing volumes by issuer type.
+
+This section documents only the differences and liquidity-specific considerations that do not appear in prior frequency sections. There are more differences here than for any prior metric because liquidity has more real-time event triggers than any other metric in this spec.
+
+---
+
+### What Is the Same as Prior Metrics
+
+| Channel | Filing Type | Phase 2 | Phase 3 |
+|---|---|---|---|
+| Quarterly financials | 10-Q | ✅ Primary source | ✅ Primary source |
+| Annual financials | 10-K | ✅ Primary source | ✅ Primary source |
+| Earnings press release | 8-K Item 2.02 | ❌ Ignore | ✅ Add |
+| Material debt creation | 8-K Item 2.03 | ❌ Ignore | ✅ Add |
+| Debt acceleration / default | 8-K Item 2.04 | ✅ Monitor (alert only) | ✅ Monitor |
+| New bond issuance | 424B prospectus | ❌ Ignore | ✅ Add |
+
+> For filing deadlines, EDGAR availability rules, and full 8-K filtering details, refer to the Leverage Frequency section.
+
+---
+
+### Liquidity-Specific Differences
+
+**Difference 1 — Item 2.02 provides stronger liquidity signal than for FCF**
+
+As noted in Signal Timing, many companies voluntarily disclose cash balances and revolver availability in earnings press releases — particularly investment-grade companies managing investor expectations and high-yield issuers under scrutiny. This makes Item 2.02 more useful for liquidity than for FCF (where OCF and capex are rarely disclosed) and approximately equivalent to coverage (where EBITDA is commonly disclosed).
+
+**System behavior in Phase 3 when Item 2.02 is detected:**
+
+```
+Step 1 — LLM reads Item 2.02 text
+Step 2 — Search for liquidity disclosures:
+         Keywords: "cash and cash equivalents",
+         "liquidity", "available liquidity",
+         "revolving credit", "available under",
+         "cash balance", "total liquidity"
+Step 3 — If explicit cash balance found:
+         Store as Tier 2 preliminary cash figure
+         Flag: "cash balance from earnings press
+         release — preliminary, unaudited;
+         treat as directional signal only;
+         do not replace Tier 1 XBRL figure"
+Step 4 — If explicit revolver availability found:
+         Store as Tier 2 preliminary revolver figure
+         Flag: "revolver availability from press
+         release — preliminary; verify against
+         Debt Footnote in subsequent 10-Q"
+Step 5 — Compute Tier 2 Available Liquidity:
+         Cash (press release) + Revolver (press release)
+         Flag: "Tier 2 available liquidity estimate —
+         14–25 days before 10-Q; preliminary figures"
+Step 6 — If neither cash nor revolver disclosed:
+         No liquidity signal from this Item 2.02
+         Flag: "no liquidity data in press release —
+         Tier 1 10-Q remains sole liquidity source"
+```
+
+**Industries where Item 2.02 liquidity disclosure is most common:**
+Investment-grade industrials, utilities, energy companies, and any issuer currently flagged at Watch or above on liquidity — stressed companies typically provide explicit liquidity reassurance in press releases to manage investor concern.
+
+---
+
+**Difference 2 — Item 1.01 is a primary liquidity update channel**
+
+For leverage, coverage, and FCF, Item 1.01 (entry into material agreement) is a secondary keyword-filtered channel — occasionally relevant if the agreement involves debt. For liquidity, Item 1.01 is a primary channel because credit facility amendments, revolver renewals, and covenant waivers — all filed under Item 1.01 — directly and immediately change available liquidity.
+
+```
+Item 1.01 liquidity triggers — process immediately
+when any of these keywords appear in the filing text:
+
+Primary triggers (always process):
+   "revolving credit facility"
+   "credit agreement"
+   "amendment" + "credit"
+   "waiver" + "covenant"
+   "extension" + "maturity"
+   "commitment" + "credit"
+
+Secondary triggers (process if issuer already flagged):
+   "term loan"
+   "letter of credit"
+   "borrowing base"
+   "springing covenant"
+   "availability block"
+
+LLM extraction targets when triggered:
+   (1) New revolver commitment amount
+       (increased, decreased, or unchanged)
+   (2) New maturity date of facility
+   (3) Any new covenant terms affecting availability
+   (4) Any waiver of existing covenant breach
+       (confirms breach occurred — escalate alert)
+   (5) Any reduction in commitment (lender pulling back)
+       — immediate liquidity reduction signal
+
+System action:
+   Update Phase 3 revolver availability figure
+   immediately — do not wait for next 10-Q
+   Flag: "revolver availability updated from
+   8-K Item 1.01 filed [date] — verify against
+   next 10-Q filing"
+```
+
+**Why this matters operationally:** A company whose revolver is amended — commitment reduced, maturity extended under duress, or covenant waived — is sending a clear signal that lenders are actively managing their exposure. Each of these events changes available liquidity immediately and may precede further deterioration. A covenant waiver in particular is a confirmed stress signal because it means a covenant was breached — the breach is real, the lender chose to waive rather than accelerate, but the underlying financial deterioration that caused the breach is visible.
+
+---
+
+**Difference 3 — Item 8.01 keyword filter is broader for liquidity**
+
+For leverage and coverage, the Item 8.01 keyword filter uses a narrow set of debt-related terms. For liquidity, the filter is broader because companies sometimes voluntarily disclose liquidity updates — particularly liquidity reassurances directed at investors — through Item 8.01 when no specific required item applies.
+
+```
+Liquidity-specific 8.01 keyword filter:
+
+Tier 1 keywords (always process):
+   "liquidity"
+   "cash position"
+   "available liquidity"
+   "revolving credit"
+   "covenant"
+   "default"
+   "waiver"
+   "going concern"
+
+Tier 2 keywords (process if issuer already flagged):
+   "cash"
+   "refinanc"
+   "maturity"
+   "borrow"
+   "facility"
+   "credit agreement"
+
+Going concern flag — highest priority:
+   If "going concern" appears in any 8-K filing:
+   IMMEDIATE CRITICAL ALERT regardless of item number
+   "Going concern" language in a filing means
+   the auditor or management has doubts about
+   the company's ability to continue as a going concern
+   This is one of the strongest default predictors
+   in structured filing data
+   No further keyword processing needed — escalate
+```
+
+---
+
+**Difference 4 — The 10-K provides liquidity data not available in 10-Q**
+
+For most metrics, the 10-K and 10-Q are interchangeable as structured data sources — the 10-K provides the same balance sheet and income statement data as the 10-Q, just for the full year. For liquidity, the 10-K provides several items that are either absent or incomplete in quarterly 10-Q filings:
+
+```
+10-K exclusive liquidity data:
+
+(1) Full revolving credit facility description
+    with complete covenant schedule
+    (10-Q often shows abbreviated version)
+
+(2) Complete debt maturity schedule
+    (all years, not just Year 1)
+    Critical for S&P Year 2 liquidity assessment
+
+(3) Full pension funded status
+    (affects available cash if pension contributions
+    are contractually required)
+
+(4) Full operating lease maturity schedule
+    (Year 1 through Year 5 plus thereafter)
+    Used in Moody's and S&P sources/uses calculation
+
+(5) Subsequent events footnote
+    (discloses material events between fiscal year-end
+    and filing date — may include liquidity events
+    that occurred in Q1 of the new fiscal year)
+
+System action for 10-K filing:
+   Trigger full LLM liquidity extraction
+   (revolver, covenants, maturity schedule,
+   subsequent events) in addition to XBRL extraction
+   Store complete liquidity picture as annual baseline
+   Update quarterly with 10-Q XBRL data
+   Flag items that are 10-K only and not updated
+   in 10-Q until next annual filing
+```
+
+---
+
+**Difference 5 — Going concern disclosure is an independent monitoring channel**
+
+Going concern language can appear in multiple filing types and locations — not just 8-K filings. It is the single highest-priority liquidity signal in this system and must be monitored across all filing channels.
+
+```
+Going concern monitoring — all channels:
+
+10-K — Auditor's Report:
+   Independent auditor's report section
+   Look for: "substantial doubt about the company's
+   ability to continue as a going concern"
+   This is the formal going concern qualification
+   Triggers: IMMEDIATE CRITICAL ALERT
+   Available: annually only
+
+10-K / 10-Q — Management's Discussion:
+   MD&A section — Liquidity and Capital Resources
+   Look for: "raise substantial doubt",
+   "ability to continue as a going concern",
+   "substantial doubt exists"
+   Management may flag going concern before
+   auditor does — this is an earlier signal
+   Triggers: IMMEDIATE CRITICAL ALERT
+
+10-K / 10-Q — Footnote 1 (Going Concern):
+   Post-ASU 2014-15, companies must disclose
+   going concern assessment in footnotes
+   Same language as auditor's report
+   Triggers: IMMEDIATE CRITICAL ALERT
+
+8-K — Any item:
+   If going concern language appears in any
+   8-K filing — press release, agreement
+   disclosure, or other event
+   Triggers: IMMEDIATE CRITICAL ALERT
+
+Phase 2 implementation:
+   Going concern detection is a simple keyword
+   search requiring no LLM — implement as
+   a text search across all filing types
+   from day one of Phase 2
+   Cost: negligible
+   Value: catches the most urgent late-stage
+   liquidity signal with no false positive risk
+   (going concern language is never accidental)
+```
+
+---
+
+### Full Update Schedule — Calendar Year Large Accelerated Filer
+
+| Month | Event | Channel | Liquidity Update Type |
+|---|---|---|---|
+| ~Jan 30 – Feb 15 | Q4 / full year earnings press release | 8-K Item 2.02 | Cash balance + revolver availability if disclosed; Phase 3 only |
+| ~Mar 31 | 10-K filed | 10-K | Full structured recompute all four ratios; full LLM extraction (revolver, covenants, maturity schedule, subsequent events); annual baseline established |
+| ~Apr 14–25 | Q1 earnings press release | 8-K Item 2.02 | Cash balance + revolver if disclosed; Phase 3 only |
+| ~May 10 | Q1 10-Q filed | 10-Q | Full structured recompute; partial LLM update (revolver drawn amount update) |
+| ~Jul 15–25 | Q2 earnings press release | 8-K Item 2.02 | Cash balance + revolver if disclosed; Phase 3 only |
+| ~Aug 9 | Q2 10-Q filed | 10-Q | Full structured recompute; partial LLM update |
+| ~Oct 14–25 | Q3 earnings press release | 8-K Item 2.02 | Cash balance + revolver if disclosed; Phase 3 only |
+| ~Nov 9 | Q3 10-Q filed | 10-Q | Full structured recompute; partial LLM update |
+| Nov 9 – Mar 31 | **Q4 dark window** | Limited | No structured update; monitor 8-K Items 1.01, 2.03, 2.04, 8.01 (keyword filtered) daily for flagged issuers |
+| Any business day | Credit facility amendment or renewal | 8-K Item 1.01 | Immediate revolver availability update; Phase 3 (Phase 2 for flagged issuers) |
+| Any business day | Material debt creation | 8-K Item 2.03 | Temporary cash increase; future OCF reduction noted |
+| Any business day | Debt acceleration / default | 8-K Item 2.04 | IMMEDIATE CRITICAL ALERT |
+| Any business day | Going concern disclosure | Any filing type | IMMEDIATE CRITICAL ALERT — keyword search Phase 2 |
+| Any business day | Voluntary liquidity update | 8-K Item 8.01 (keyword filtered) | Process if liquidity keywords present |
+
+---
+
+### Phase Summary
+
+**Phase 2:** Monitor 10-Q and 10-K for all four ratio computations from XBRL. Available Liquidity Coverage computed as cash-only partial figure — flag revolver exclusion on every output. Implement going concern keyword search across all filing types from day one — highest value, lowest cost monitoring addition. Monitor 8-K Item 2.04 as automatic escalation. Monitor 8-K Item 1.01 with keyword filter for credit facility events for issuers already flagged at Watch or above.
+
+**Phase 3:** Add full LLM revolver extraction from 10-K and 10-Q Debt Footnotes — completes Available Liquidity Coverage from partial to full. Add 8-K Item 2.02 LLM processing for cash and revolver disclosures. Expand Item 1.01 monitoring to all issuers regardless of current alert level. Add keyword-filtered Item 8.01 processing with broader liquidity keyword set. Implement Moody's twelve-month sources/uses and S&P liquidity descriptor computations using LLM-extracted inputs. Add component-level trend monitoring (cash depletion, revolver draw pattern, current liabilities growth) as standalone signals separate from ratio outputs.
 
