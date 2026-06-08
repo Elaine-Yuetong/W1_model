@@ -1171,6 +1171,210 @@ cumulative — verify period contexts match."
 
 ---
 
+**Frequency — Free Cash Flow**
+
+---
+
+### Overview
+
+Free cash flow shares the same six-channel update structure as leverage and interest coverage. Filing deadlines, EDGAR availability rules, and the Phase 2 vs Phase 3 priority framework are identical — refer to the Leverage Frequency section for full channel definitions, 8-K filtering rules, and expected filing volumes by issuer type.
+
+This section documents only the differences and FCF-specific considerations that do not appear in the Leverage or Coverage Frequency sections.
+
+---
+
+### What Is the Same as Leverage and Coverage
+
+The following table summarizes the shared structure. For full definitions, filing deadlines, and 8-K filtering rules, refer to the **Frequency** section in LEVERAGE.md.
+
+| Channel | Filing Type | Phase 2 | Phase 3 |
+|---|---|---|---|
+| Quarterly financials | 10-Q | ✅ Primary source | ✅ Primary source |
+| Annual financials | 10-K | ✅ Primary source | ✅ Primary source |
+| Earnings press release | 8-K Item 2.02 | ❌ Ignore | ✅ Add (with caveat — see below) |
+| Material debt creation | 8-K Item 2.03 | ❌ Ignore | ✅ Add (with caveat — see below) |
+| Debt acceleration / default | 8-K Item 2.04 | ✅ Monitor (alert only) | ✅ Monitor |
+| New bond issuance | 424B prospectus | ❌ Ignore | ✅ Add (with caveat — see below) |
+
+---
+
+### FCF-Specific Differences
+
+**Difference 1 — Item 2.02 provides weaker FCF signal than for Coverage**
+
+For coverage, the earnings press release discloses EBITDA — the primary coverage driver — giving a genuine directional signal 14–25 days before the 10-Q. For FCF, press releases rarely disclose OCF or capex. The FCF signal from Item 2.02 is therefore indirect and weaker.
+
+**System behavior in Phase 3 when Item 2.02 is detected:**
+
+```
+Step 1 — LLM reads Item 2.02 text
+Step 2 — Check for explicit FCF disclosure:
+         Keywords: "free cash flow", "operating cash flow",
+         "capital expenditures", "cash generation"
+         If found: extract figure and store as Tier 2
+         preliminary FCF estimate
+         Flag: "FCF disclosed in earnings press release —
+         preliminary, unaudited, company-defined;
+         treat as directional signal only"
+Step 3 — If no explicit FCF disclosure:
+         Extract EBITDA from press release (if disclosed)
+         Store as indirect FCF signal:
+         Flag: "no FCF disclosed in press release —
+         EBITDA directional signal only; OCF and capex
+         not available until 10-Q"
+Step 4 — Do NOT attempt to compute FCF from
+         press release EBITDA alone — OCF and capex
+         are independent of EBITDA and cannot be
+         reliably estimated without the cash flow statement
+```
+
+**Industries where Item 2.02 FCF disclosure is common:**
+Energy (oil & gas, midstream), mining, utilities, and high-yield issuers with investor-relations FCF guidance. For these sectors, activate full Tier 2 FCF processing in Phase 3. For all other sectors, treat Item 2.02 as an EBITDA directional signal only.
+
+---
+
+**Difference 2 — Item 2.03 and 424B have indirect and delayed FCF impact**
+
+For coverage, a new debt event (Item 2.03 or 424B) allows a projected interest expense impact to be computed mechanically from the coupon rate. For FCF, the impact is indirect and delayed:
+
+```
+Immediate impact (same quarter):
+   Cash balance increases by debt proceeds
+   → Improves cash runway calculation
+   → Update: Cash Runway = (Prior Cash + New Debt Proceeds)
+              / Absolute quarterly FCF burn
+   Flag: "cash runway updated for new debt proceeds from
+   [8-K / 424B date]; does not reflect future interest
+   payments on new debt"
+
+Delayed impact (next quarter and beyond):
+   Interest payments on new debt reduce OCF
+   → FCF will be lower in subsequent quarters
+   → Estimate: Annual interest impact =
+     New Debt Amount × Coupon Rate
+     Quarterly OCF reduction ≈ Annual interest / 4
+   Flag: "forward FCF will be reduced by estimated
+   $X million per quarter from new debt interest;
+   full impact visible in next 10-Q"
+
+System action:
+   Store both the immediate cash runway update and
+   the forward FCF impact estimate separately.
+   Do NOT adjust the current period FCF figure.
+   Do NOT trigger FCF alerts based on forward estimates alone.
+   Use forward estimate as context for analyst review only.
+```
+
+---
+
+**Difference 3 — Cumulative vs quarterly figures require period subtraction**
+
+As noted in Signal Timing, OCF and capex in 10-Q filings are typically year-to-date cumulative figures, not quarter-only. This creates a frequency-specific extraction requirement that does not apply to leverage or coverage — both of which use balance sheet items (instant) or income statement items that are consistently reported as period-specific figures.
+
+```
+Period handling rule for FCF extraction:
+
+For 10-K filings:
+   OCF and Capex are full-year figures.
+   Use directly — no subtraction needed.
+   Period = fiscal year end date.
+
+For Q1 10-Q:
+   OCF and Capex are Q1 standalone (3-month YTD).
+   Use directly — first quarter has no prior period
+   to subtract.
+   Period = March 31 (or Q1 fiscal end date).
+
+For Q2 10-Q:
+   OCF and Capex may be 6-month YTD.
+   Quarterly FCF = (6M OCF − 6M Capex)
+                 − (3M OCF − 3M Capex)
+   where 3M figures come from Q1 10-Q stored values.
+   Period = June 30 (or Q2 fiscal end date).
+
+For Q3 10-Q:
+   OCF and Capex may be 9-month YTD.
+   Quarterly FCF = (9M OCF − 9M Capex)
+                 − (6M OCF − 6M Capex)
+   where 6M figures come from Q2 10-Q stored values.
+   Period = September 30 (or Q3 fiscal end date).
+
+Verification step:
+   Check XBRL period context tags to confirm
+   whether values are YTD or quarter-only.
+   Some companies tag both — use quarter-only
+   if available to avoid subtraction dependency.
+   Flag: "quarterly FCF derived by period subtraction
+   — verify XBRL period contexts confirmed YTD basis"
+
+Storage requirement:
+   System must store cumulative OCF and Capex
+   per period to enable Q2 and Q3 subtraction.
+   If Q1 filing data is missing from storage
+   when Q2 arrives: mark Q2 quarterly FCF as null
+   Flag: "prior period cumulative not available —
+   quarterly FCF cannot be derived; YTD FCF stored
+   as substitute"
+   Store YTD FCF as fallback even when quarterly
+   FCF cannot be computed.
+```
+
+---
+
+**Difference 4 — Annual FCF run-rate calculation**
+
+For trend analysis and cash runway computation, the system needs an annualised FCF figure regardless of which quarter is being processed. This is straightforward for annual 10-K data but requires annualisation for quarterly data.
+
+```
+Annual FCF Run-Rate:
+
+From 10-K: use full-year FCF directly
+From Q1 10-Q: Annual run-rate = Q1 FCF × 4
+              Flag: "annualised from single quarter —
+              high variance; seasonal distortion possible"
+From Q2 10-Q: Annual run-rate = H1 FCF × 2
+              Flag: "annualised from two quarters —
+              moderate variance"
+From Q3 10-Q: Annual run-rate = (9M FCF / 3) × 4
+              Flag: "annualised from three quarters —
+              most reliable quarterly estimate;
+              Q4 not yet captured"
+
+Preferred approach for trend analysis:
+   Use trailing twelve months (TTM) FCF where possible:
+   TTM FCF = Full prior year FCF
+           + YTD current year FCF
+           − Same YTD prior year FCF
+   (requires storing prior year quarterly data)
+   Flag: "TTM FCF computed from [prior year 10-K]
+   and [current year YTD 10-Q]"
+```
+
+---
+
+### Full Update Schedule — Calendar Year Large Accelerated Filer
+
+| Month | Event | Channel | FCF Update Type |
+|---|---|---|---|
+| ~Jan 30 – Feb 15 | Q4 / full year earnings press release | 8-K Item 2.02 | Indirect signal only for most issuers — check for explicit FCF disclosure; Phase 3 only |
+| ~Mar 31 | 10-K filed | 10-K | Full structured recompute; full year FCF; TTM baseline established; Formula 2/3 LLM extraction possible |
+| ~Apr 14–25 | Q1 earnings press release | 8-K Item 2.02 | Indirect signal only for most issuers; Phase 3 only |
+| ~May 10 | Q1 10-Q filed | 10-Q | Full structured recompute; Q1 standalone FCF; annualised run-rate computed |
+| ~Jul 15–25 | Q2 earnings press release | 8-K Item 2.02 | Indirect signal only for most issuers; Phase 3 only |
+| ~Aug 9 | Q2 10-Q filed | 10-Q | Full structured recompute; Q2 standalone FCF (derived by subtraction from H1 YTD); TTM FCF updated |
+| ~Oct 14–25 | Q3 earnings press release | 8-K Item 2.02 | Indirect signal only for most issuers; Phase 3 only |
+| ~Nov 9 | Q3 10-Q filed | 10-Q | Full structured recompute; Q3 standalone FCF (derived by subtraction from 9M YTD); TTM FCF updated |
+| Nov 9 – Mar 31 | **Q4 dark window** | None for FCF | **No FCF update possible — worst dark window of all metrics; heightened monitoring for flagged issuers** |
+| Any business day | New debt event | 8-K Item 2.03 or 424B | Cash runway update only; forward OCF impact estimate stored; no FCF recompute |
+| Any business day | Debt acceleration / default | 8-K Item 2.04 | Automatic Stress alert — no FCF recompute |
+
+---
+
+### Phase Summary
+
+**Phase 2:** Monitor 10-Q and 10-K only. Full structured recompute 4× per year. Derive quarterly FCF by period subtraction for Q2 and Q3 — requires storing prior period cumulative figures. Compute and store FCF margin, OCF/EBITDA conversion ratio, annualised run-rate, and TTM FCF alongside absolute FCF. Monitor 8-K Item 2.04 as automatic escalation trigger. Flag Q4 dark window for issuers at Watch or above on FCF at Q3.
+
+**Phase 3:** Add 8-K Item 2.02 LLM processing — check for explicit FCF disclosure for energy, mining, utility, and high-yield issuers; use EBITDA as indirect signal for others. Add 8-K Item 2.03 and 424B for cash runway update and forward OCF impact estimate. Maintain Item 2.04 automatic escalation. Apply keyword filter to 8-K Items 1.01, 8.01, and 7.01 for capex-related disclosures (e.g. major asset purchases, capex programme announcements) that may affect forward FCF.
 
 
 
