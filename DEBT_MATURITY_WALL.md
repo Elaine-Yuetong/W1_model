@@ -1722,3 +1722,294 @@ wall's unique contribution to real-time monitoring.
 >
 > The maturity wall's lead time advantage is the longest of any metric — 2–5 years of structural visibility in Zone 1. This advantage is realised only when combined with other metrics: FCF compression and leverage deterioration determine how quickly a company is approaching its wall, while the wall itself defines the deadline by which financial improvement must occur or refinancing must be executed. All five primary metrics — FCF, coverage, leverage, liquidity, and maturity wall — must be evaluated simultaneously to assess whether a company will reach its maturity wall in a position to successfully refinance.
 
+## Frequency — Debt Maturity Wall
+
+---
+
+### Overview
+
+The debt maturity wall has the most complex update structure of any metric in this spec. It differs from all prior metrics in three fundamental ways that make a simple reference to the Leverage Frequency section insufficient.
+
+First, it has two distinct structured update frequencies running simultaneously — annual for the full schedule and quarterly for the near-term balance sheet component. Second, it generates daily alerts from a countdown computation that requires no filing trigger. Third, it has more relevant intra-quarter event-driven update channels than any other metric because debt issuances, repayments, and amendments are directly and immediately visible through prospectus and 8-K filings.
+
+---
+
+### What Is the Same as Prior Metrics
+
+| Channel | Filing Type | Phase 2 | Phase 3 |
+|---|---|---|---|
+| Quarterly balance sheet | 10-Q | ✅ Near-term maturity coverage ratio (Formula 1 only) | ✅ Same + XBRL maturity tag check |
+| Annual full schedule | 10-K | ✅ XBRL attempt + LLM extraction (Formula 2) | ✅ Full Formula 2 + Formula 3 tranche analysis |
+| Earnings press release | 8-K Item 2.02 | ❌ Ignore | ✅ Add (refinancing status commentary) |
+| Debt acceleration / default | 8-K Item 2.04 | ✅ Monitor — immediate Critical alert | ✅ Monitor |
+
+---
+
+### Maturity Wall-Specific Differences
+
+**Difference 1 — Daily countdown computation (no filing required)**
+
+This is the only metric in the system that generates alerts without a new filing. The days-to-maturity countdown runs every day as a background computation against the stored rolling schedule.
+
+```
+Daily Countdown Process:
+
+Input: Rolling maturity schedule (stored per issuer)
+       containing maturity dates and principal amounts
+
+For each maturity entry in schedule:
+   Days_Remaining = maturity_date - current_date
+   Prior_Alert_Level = stored alert level for this entry
+
+   Compute new alert level per Dimension 2 thresholds:
+   > 730 days → No alert
+   548–730 days → Watch
+   365–548 days → Flag
+   180–365 days → Stress
+   90–180 days → Critical
+   < 90 days → Critical (highest urgency)
+
+   If new alert level > Prior_Alert_Level:
+      Generate escalation alert:
+      "Maturity threshold crossed — [issuer] [instrument]
+       principal $X million now [N] days away;
+       alert escalated from [prior] to [new level]"
+      Update stored alert level
+      Log: escalation_date, days_remaining,
+           prior_level, new_level, maturity_date,
+           principal_amount
+
+   If new alert level = Prior_Alert_Level:
+      No new alert — existing alert confirmed active
+      Update stored days_remaining value
+
+   If new alert level < Prior_Alert_Level:
+      This occurs only if a refinancing has been
+      detected and the maturity entry has been
+      resolved — should not occur from countdown
+      alone; log as anomaly if it does
+
+Run frequency: daily on all business days
+               (Monday through Friday)
+               Skip weekends and public holidays —
+               maturity dates falling on non-business
+               days are legally due on the next
+               business day; adjust accordingly
+```
+
+**Implementation note for Phase 2:** The daily countdown is the lowest-cost, highest-value addition to Phase 2. It requires no new data extraction — only the stored maturity schedule from the most recent 10-K and the current date. It can be implemented as a simple loop over the stored schedule. The alert generation logic is identical to the threshold computation already defined. This should be implemented from day one of Phase 2 for the near-term maturity (12-month current portion) even before Phase 3 LLM extraction of the full schedule is available.
+
+---
+
+**Difference 2 — 424B prospectus filings are a primary channel**
+
+For all prior metrics, the 424B filing is a Phase 3 channel that provides partial updates (new debt affects leverage and FCF projections). For the maturity wall, 424B filings are a primary real-time data source that directly patches the rolling schedule.
+
+```
+424B Processing — Phase 3:
+
+Trigger: Any 424B, 424B2, 424B3, 424B5 filing
+         by a monitored issuer on EDGAR
+
+LLM extraction targets (from cover page and
+pricing supplement):
+   (1) Principal amount of new issuance
+   (2) Maturity date (exact date)
+   (3) Coupon rate and type (fixed/floating)
+   (4) Instrument type (senior notes, subordinated,
+       convertible, etc.)
+   (5) Use of proceeds — specifically whether
+       proceeds will be used to repay maturing debt
+       ("intended to be used to redeem/repay/refinance
+       [instrument]")
+
+System action:
+   Add new maturity to rolling schedule:
+   Schedule[maturity_year] += principal_amount
+   Log patch with 424B accession number
+
+   If use of proceeds confirms repayment of
+   existing instrument:
+      Identify instrument being repaid
+      Mark that maturity as "refinancing confirmed"
+      Reduce Schedule[maturing_year] by repaid amount
+      Flag: "refinancing confirmed — [original
+      instrument] being repaid with proceeds
+      from [new instrument] maturing [new date]"
+      Downgrade alert level for original maturity
+      if repayment confirmed
+
+   Re-run reconciliation check after patch
+```
+
+---
+
+**Difference 3 — 8-K Item 1.01 is a primary channel for maturity changes**
+
+For liquidity, Item 1.01 is an important channel for revolver amendments. For the maturity wall, Item 1.01 covers a broader set of maturity-relevant events including term loan amendments, maturity extensions, and covenant modifications.
+
+```
+8-K Item 1.01 Maturity Wall Triggers:
+
+Primary triggers (always process):
+   "maturity" + "extend" OR "amendment"
+   "term loan" + "amendment"
+   "credit agreement" + "amendment"
+   "refinanc"
+   "tender offer"
+   "redemption"
+   "repurchase"
+
+LLM extraction when triggered:
+   (1) Which instrument is being amended
+   (2) Original maturity date
+   (3) New maturity date (if extended)
+   (4) Principal amount affected
+   (5) Whether amendment involves covenant
+       changes that affect acceleration provisions
+
+System action:
+   Maturity extension:
+      Update rolling schedule:
+      Remove principal from original_year
+      Add principal to new_maturity_year
+      Flag: "maturity extended — [instrument]
+      maturity moved from [original] to [new];
+      rolling schedule updated"
+      Recompute WADM and concentration ratios
+
+   Maturity extension at shorter tenor than hoped:
+      Flag: "maturity extended but tenor shorter
+      than original instrument — possible lender
+      confidence signal; monitor"
+
+   Covenant modification reducing headroom:
+      Cross-reference Covenant Headroom metric
+      Flag for joint review
+```
+
+---
+
+**Difference 4 — Cash flow statement repayment monitoring**
+
+Principal repayments on the cash flow statement — visible in financing activities — confirm that maturities have been paid. This is the structured confirmation that a maturity has been retired.
+
+```
+Cash flow statement repayment detection:
+
+Tags to monitor in financing activities section:
+   us-gaap:RepaymentsOfLongTermDebt
+   us-gaap:RepaymentsOfDebt
+   us-gaap:RepaymentsOfSeniorDebt
+   us-gaap:RepaymentsOfNotesPayable
+
+If repayment amount detected in current period
+that matches a scheduled maturity within ±10%:
+   Mark that maturity as "repaid"
+   Remove from rolling schedule
+   Flag: "maturity confirmed repaid —
+   $X million repayment in financing activities
+   matches scheduled maturity for [year]"
+
+If repayment amount detected that does NOT match
+any scheduled maturity:
+   Flag: "unscheduled repayment detected —
+   $X million; may represent early repayment,
+   revolver pay-down, or untracked instrument;
+   verify against Debt Footnote at next 10-K"
+   Store as unmatched repayment in audit log
+
+This structured detection runs quarterly from
+the 10-Q cash flow statement — no LLM required.
+```
+
+---
+
+**Difference 5 — 8-K Item 8.01 keyword filter is narrower than for Liquidity**
+
+For liquidity, the Item 8.01 filter uses a broad set of keywords because companies voluntarily disclose liquidity reassurances. For the maturity wall, the filter is focused specifically on refinancing activity and maturity resolution events.
+
+```
+Maturity Wall-specific 8.01 keyword filter:
+
+Always process:
+   "refinanc"
+   "tender offer"
+   "redemption notice"
+   "repurchase" + "notes" OR "bonds"
+   "called for redemption"
+   "matured"
+   "repaid in full"
+
+Process if issuer in Zone 2 or Zone 3:
+   "debt" + "transaction"
+   "capital markets"
+   "offering"
+
+Do NOT process unless above keywords present:
+   General operational updates
+   Earnings guidance
+   Personnel changes
+   All other topics
+```
+
+---
+
+**Difference 6 — Tender offer filings (SC TO-I) are relevant**
+
+When a company launches a tender offer to repurchase its own maturing bonds, it files a Schedule TO-I with the SEC. This is outside the standard 8-K / 10-Q / 10-K universe but is directly relevant to maturity wall resolution.
+
+```
+Schedule TO-I monitoring — Phase 3:
+
+Trigger: SC TO-I or SC TO-T filing by monitored issuer
+
+LLM extraction:
+   (1) Which bonds are being tendered
+   (2) Tender price and expiration date
+   (3) Whether tender is conditional on
+       new financing being completed
+
+System action:
+   Flag: "tender offer launched for [instrument]
+   maturing [date] — active liability management;
+   maturity resolution in progress"
+   If tender is successful (confirmed by SC TO-I/A
+   amendment showing results): mark maturity
+   as resolved; update rolling schedule
+   Downgrade maturity alert level to No Alert
+   for tendered portion
+```
+
+---
+
+### Full Update Schedule — Calendar Year Large Accelerated Filer
+
+| Timing | Event | Channel | Maturity Wall Update Type |
+|---|---|---|---|
+| Every business day | Days countdown | Internal computation | Days-to-maturity updated; threshold crossing alerts generated if applicable |
+| ~Mar 31 | 10-K filed | 10-K | Full schedule refresh: XBRL extraction + LLM extraction + reconciliation + Formula 3 tranche analysis; new annual baseline stored |
+| ~May 10 | Q1 10-Q filed | 10-Q | Formula 1 near-term maturity coverage ratio updated from balance sheet; XBRL maturity tags checked for quarterly update; cash flow statement repayments checked |
+| ~Aug 9 | Q2 10-Q filed | 10-Q | Same as Q1 10-Q |
+| ~Nov 9 | Q3 10-Q filed | 10-Q | Same as Q1 10-Q |
+| ~Jan 30 – Feb 15 | Q4 earnings press release | 8-K Item 2.02 | Refinancing status commentary if disclosed; Phase 3 only |
+| Any business day | New bond issuance | 424B filing | Immediate rolling schedule patch; new maturity added; use of proceeds checked for refinancing confirmation; Phase 3 |
+| Any business day | New credit facility or maturity extension | 8-K Item 1.01 | Rolling schedule update; maturity date changes logged; WADM recomputed; Phase 3 for full LLM; Phase 2 keyword monitoring for flagged issuers |
+| Any business day | Debt acceleration / default | 8-K Item 2.04 | IMMEDIATE CRITICAL ALERT — effective maturity wall collapsed to zero |
+| Any business day | Tender offer launch | SC TO-I | Active liability management flag; Phase 3 |
+| Any business day | Tender offer completion | SC TO-I/A | Maturity resolved for tendered portion; rolling schedule updated; Phase 3 |
+| Any business day | Voluntary refinancing announcement | 8-K Item 8.01 (keyword filtered) | Refinancing activity signal; Phase 3 |
+| Any business day | Principal repayment detected | 10-Q cash flow statement | Structured confirmation of maturity retirement; quarterly update |
+
+---
+
+### Phase Summary
+
+**Phase 2:**
+
+Monitor 10-Q and 10-K for Formula 1 near-term maturity coverage ratio. Attempt XBRL maturity tag extraction at each 10-K filing with mandatory reconciliation check — fall back to LLM if reconciliation fails. Run daily countdown computation against stored rolling schedule anchored to most recent 10-K. Monitor 8-K Item 2.04 as automatic Critical escalation. Monitor 8-K Item 1.01 and 8-K Item 8.01 with keyword filters for flagged issuers in Zone 2 or Zone 3. Monitor cash flow statement financing activities quarterly for principal repayments to confirm maturity retirements. Implement going concern keyword search across all filing types — same as Liquidity metric.
+
+**Phase 3:**
+
+Add full Formula 2 LLM maturity schedule extraction at each 10-K with dual-path XBRL and LLM verification. Add 424B processing for same-day rolling schedule patching. Add 8-K Item 1.01 full LLM extraction for maturity extensions and amendments across all issuers. Add SC TO-I tender offer monitoring. Add Formula 3 tranche-level analysis including floating rate spread extraction and callable/puttable feature tracking. Add interest rate reset impact computation requiring external spread data. Add refinancing absence signal for Zone 2 issuers — flag when no refinancing activity is detected within 30 and 60 days of Zone 2 entry. Add 8-K Item 2.02 LLM processing for refinancing status commentary.
+
