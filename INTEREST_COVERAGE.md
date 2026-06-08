@@ -226,6 +226,7 @@ Formulas 2 and 3 are reserved for Phase 3. Once implemented, the divergence betw
 
 **Where it lives**
 
+> Appendix C
 ---
 
 **Formula 1 — Automated Baseline**
@@ -242,10 +243,10 @@ All items are structured, on the face of financial statements, available in both
 **Note on interest income netting:** Some companies — particularly those with large cash balances like Apple or Microsoft — report only net interest (interest expense minus interest income) as a single line item rather than gross interest expense. This overstates coverage because it reduces the denominator. Your system must detect this and flag it. The signal is: `us-gaap:InterestExpense` is absent but `us-gaap:InterestIncomeExpenseNet` is present. When this occurs, gross interest expense must be reconstructed from the interest footnote via LLM.
 
 > **Phase 2 rule for bundled interest expense:**
-If `us-gaap:InterestExpense` is absent and only `us-gaap:InterestIncomeExpenseNet` or a bundled "Other expense, net" line exists:
-- Mark Interest Coverage = null
-- Log: "interest expense cannot be isolated from net interest or other non-operating items — LLM required for Phase 3"
-- Do not compute a ratio using the net figure (it would overstate coverage)
+> If `us-gaap:InterestExpense` is absent and only `us-gaap:InterestIncomeExpenseNet` or a bundled "Other expense, net" line exists:
+> - Mark Interest Coverage = null
+> - Log: "interest expense cannot be isolated from net interest or other non-operating items — LLM required for Phase 3"
+> - Do not compute a ratio using the net figure (it would overstate coverage)
 
 > **Phase 3 rule:**
 Use LLM to extract gross interest expense from the interest footnote or income statement footnote, then recompute coverage.
@@ -318,7 +319,37 @@ All adjustment items are unstructured — they require LLM extraction from footn
 ---
 
 
+**Structured or Unstructured — Interest Coverage Metric (All Three Formulas)**
 
+> Appendix D
+
+| Input / Component | Formula | XBRL Tag | Structured or Unstructured | Notes |
+|---|---|---|---|---|
+| **Operating Income (EBIT)** | F1, F2 | Primary: `us-gaap:OperatingIncomeLoss` Fallback 1: `us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxes` Fallback 2: Derived from `us-gaap:GrossProfit` − `us-gaap:SellingGeneralAndAdministrativeExpense` − `us-gaap:ResearchAndDevelopmentExpense` | Structured — with financing contamination risk on fallback | Fallback 1 includes interest income and expense below the operating line — flags as "EBIT includes non-operating items; coverage ratio may be understated." Fallback 2 derivation may miss other operating expense lines — flag as "derived, verify completeness." |
+| **Interest Expense (gross)** | F1, F2, F3 | Primary: `us-gaap:InterestExpense` Fallback 1: `us-gaap:InterestAndDebtExpense` Fallback 2: `us-gaap:InterestIncomeExpenseNet` (net figure — flag) | Structured — with netting risk | Critical: some companies tag only net interest. If `us-gaap:InterestExpense` is absent but `us-gaap:InterestIncomeExpenseNet` is present, flag: "gross interest expense not separately tagged — coverage ratio may be overstated; gross figure requires LLM extraction from interest footnote." Never use net interest as a silent substitute for gross. |
+| **Interest Income** | F1 supplementary | `us-gaap:InterestIncomeOperating` or `us-gaap:InvestmentIncomeInterest` | Structured — supplementary only | Used only to detect netting. If Interest Expense tag is missing and net interest tag is present, subtract interest income from net to reconstruct gross. Flag in audit log. |
+| **EBITDA** (supplementary coverage) | F1 supplementary | No standard tag — derived: `us-gaap:OperatingIncomeLoss` + `us-gaap:DepreciationDepletionAndAmortization` | Structured inputs, derived result | Computed as supplementary figure alongside EBIT-based coverage. Labeled "EBITDA Coverage" in output — not the primary ratio. Same derivation as Leverage Formula 1. |
+| **Revenue** | F3 | `us-gaap:Revenues` or `us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax` | Structured | Used as S&P starting point for Adjusted EBITDA numerator. Reliable and consistently tagged. |
+| **Operating Expenses** | F3 | `us-gaap:OperatingExpenses` or derived: `us-gaap:CostOfRevenue` + `us-gaap:SellingGeneralAndAdministrativeExpense` + `us-gaap:ResearchAndDevelopmentExpense` | Structured — may require summing | S&P computes Adjusted EBITDA top-down as Revenue − Operating Expenses + D&A. Some companies tag `OperatingExpenses` as a single line; others require summing components. |
+| **D&A** | F3 | Primary: `us-gaap:DepreciationDepletionAndAmortization` Fallback: `us-gaap:DepreciationAndAmortization` | Structured | Same extraction as Leverage Formula 1. Cash flow statement operating section is the most reliable source. |
+| **Capitalized Interest** | F2 | No standard tag | **Unstructured — LLM required** | Lives in PP&E Footnote (typically Note 4–7). LLM should read the interest reconciliation paragraph: "gross interest incurred minus capitalized interest equals interest expense charged to income." Extract single number: total interest capitalized during the period. Moody's subtracts this from reported interest expense. Available in 10-K; occasionally in 10-Q for capital-intensive companies. |
+| **Pension Interest Cost** | F2 | No standard tag at required granularity | **Unstructured — LLM required** | Lives in Pension Footnote (typically Note 8–12). LLM should read the "Net Periodic Benefit Cost" table and extract the "Interest cost" line specifically. Distinguished from "Service cost" — both must be extracted. Moody's adds the interest cost component to the interest expense denominator. 10-K only. |
+| **Operating Lease Interest Component** | F2 | No standard tag for interest component alone | **Semi-structured — partial tag, rule applied** | Post-ASC 842: total operating lease cost is tagged as `us-gaap:OperatingLeaseCost`. Moody's estimates interest component as 1/3 of total annual operating lease expense — this 1/3 split is a Moody's rule, not a disclosed figure. System applies the rule to the tagged or LLM-extracted lease cost figure. Flag: "lease interest component estimated at 1/3 of annual lease expense per Moody's methodology." |
+| **Current Year Operating Lease Payments** | F3 | No standard tag for Year 1 of maturity schedule | **Unstructured — LLM required** | Lives in Lease Footnote maturity schedule table. LLM should read the first row of the operating lease maturity table — labeled "Less than 1 year," "Within 1 year," or the next fiscal year (e.g., "2026"). This is the full lease payment used in S&P's fixed charges denominator — not just the interest component. Available in both 10-K and 10-Q. |
+| **Preferred Dividends** | F3 | `us-gaap:PreferredStockDividendsAndOtherAdjustments` (if tagged) | Semi-structured — sometimes tagged, sometimes footnote only | Appears as a deduction below net income on the income statement. If not tagged, LLM should read the Equity Footnote (typically Note 10–15) to extract dividend rate and compute total. For most investment-grade corporate bond issuers this will be zero — flag if non-zero as it materially reduces fixed charge coverage. |
+| **Gross vs Net Interest Confirmation** | F3 | No tag — policy disclosure | **Unstructured — LLM required** | LLM should read Note 1 (Summary of Significant Accounting Policies) or a standalone interest footnote to confirm whether the company presents interest gross or net. If net presentation confirmed: LLM must also extract gross interest expense and interest income separately so the system can use gross in the denominator. Flag: "interest presented net — gross figure reconstructed from footnote." |
+| **Restructuring Charges** | F3 | `us-gaap:RestructuringCharges` (sometimes tagged) | Semi-structured — tagged on income statement, detail in footnote | Same treatment as Leverage Formula 3. S&P does not add back restructuring — it remains as an operating cost reducing Adjusted EBITDA. Confirm amount and treatment via LLM if material. |
+| **Stock-Based Compensation** | F3 | `us-gaap:ShareBasedCompensation` | Structured — reliably tagged in cash flow statement | Same treatment as Leverage Formula 3. S&P does not add back SBC to EBITDA. Tag used only to identify and confirm the amount is not added back. Flag in audit log. |
+
+
+## Phase 2 Handling for Semi-Structured Items
+
+For Phase 2 (no LLM):
+- Items marked "semi-structured" that require a rule (e.g., lease interest component = 1/3 of lease cost) **are computed** using the XBRL tag + the rule, without LLM
+- Items marked "semi-structured" that require footnote verification (e.g., preferred dividends, restructuring) are **marked as null** with a log message: "requires LLM for Phase 3"
+
+For Phase 3:
+- All semi-structured items are recomputed with LLM confirmation
 
 
 
@@ -388,4 +419,20 @@ Supplementary: EBITDA Coverage = (Operating Income + D&A) / Interest Expense
 | Preferred dividends | F3 | Income Statement + Equity Footnote | Below net income / Equity note | Both |
 | Gross interest confirmation | F3 | Note 1 or Interest Footnote | Accounting policies or interest breakdown | Both |
 
+
+## Appendix D
+
+---
+
+**Quick Reference — Structured vs Unstructured by Formula**
+
+| | F1 — Baseline | F2 — Moody's | F3 — S&P |
+|---|---|---|---|
+| **Fully structured (XBRL)** | Operating Income, Interest Expense | Inherits F1 + Operating Lease Cost (partial) | Revenue, OpEx, D&A, SBC |
+| **Semi-structured (tag exists but needs verification)** | Interest netting detection | Lease interest component (tag + rule) | Preferred dividends, restructuring |
+| **Fully unstructured (LLM required)** | None | Capitalized interest, Pension interest cost | Gross interest confirmation, Current year lease payments |
+| **LLM needed?** | ❌ No | ✅ Yes | ✅ Yes |
+| **Phase** | Phase 2 | Phase 3 | Phase 3 |
+
+---
 
