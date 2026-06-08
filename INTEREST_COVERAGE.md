@@ -224,7 +224,98 @@ Formulas 2 and 3 are reserved for Phase 3. Once implemented, the divergence betw
 
 ---
 
+**Where it lives**
 
+---
+
+**Formula 1 — Automated Baseline**
+
+All items are structured, on the face of financial statements, available in both 10-K and 10-Q.
+
+| Input | Financial Statement | Exact Line Item | Available In |
+|---|---|---|---|
+| EBIT (Operating Income) | Income Statement | "Operating income" or "Income from operations" | 10-K and 10-Q |
+| Interest Expense | Income Statement — below operating income, in the "Other income / expense" section | "Interest expense" or "Interest and debt expense" | 10-K and 10-Q |
+
+**Note on Interest Expense location:** Unlike operating income which sits in the operating section, interest expense lives below the operating income line in the non-operating / other income and expense section. In the XBRL document it is tagged separately from operating items. Some companies present a subtotal called "Total other expense, net" that bundles interest expense with other non-operating items — if this is the only tag available, LLM extraction from the income statement footnote is required to isolate interest expense alone.
+
+**Note on interest income netting:** Some companies — particularly those with large cash balances like Apple or Microsoft — report only net interest (interest expense minus interest income) as a single line item rather than gross interest expense. This overstates coverage because it reduces the denominator. Your system must detect this and flag it. The signal is: `us-gaap:InterestExpense` is absent but `us-gaap:InterestIncomeExpenseNet` is present. When this occurs, gross interest expense must be reconstructed from the interest footnote via LLM.
+
+> **Phase 2 rule for bundled interest expense:**
+If `us-gaap:InterestExpense` is absent and only `us-gaap:InterestIncomeExpenseNet` or a bundled "Other expense, net" line exists:
+- Mark Interest Coverage = null
+- Log: "interest expense cannot be isolated from net interest or other non-operating items — LLM required for Phase 3"
+- Do not compute a ratio using the net figure (it would overstate coverage)
+
+> **Phase 3 rule:**
+Use LLM to extract gross interest expense from the interest footnote or income statement footnote, then recompute coverage.
+
+---
+
+**Formula 2 — Moody's-Style Adjustments**
+
+All adjustment items are unstructured — they require LLM extraction from footnotes. All items below are in addition to the Formula 1 base inputs.
+
+**Item 2a — Capitalized Interest**
+
+| Field | Detail |
+|---|---|
+| Where it lives | PP&E Footnote (typically Note 4–7, titled "Property, Plant and Equipment") or the Interest Expense footnote if one exists separately |
+| Available in | 10-K only in most cases; occasionally in 10-Q for capital-intensive companies mid-construction |
+| Exact location within footnote | Look for a sentence or table disclosing "capitalized interest" or "interest capitalized during the period." It typically appears as a reconciliation: gross interest incurred minus capitalized interest equals interest expense charged to income. |
+| What LLM should extract | Single number: total interest capitalized during the period. Moody's subtracts this from reported interest expense because capitalized interest has not yet been charged to the income statement — it is not a current cash obligation against earnings. |
+
+**Item 2b — Pension Interest Cost Reclassification**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Pension / Employee Benefits Footnote (same note as described in Leverage Formula 2 — typically Note 8–12) |
+| Available in | 10-K only |
+| Exact location within footnote | The "Net Periodic Benefit Cost" table. Look for the line items "Interest cost" and "Service cost" within that table. Moody's reclassifies the excess of total pension expense over service cost — including the interest cost component — from operating expense to interest expense. |
+| What LLM should extract | Two numbers from the Net Periodic Benefit Cost table: (1) Service cost, (2) Interest cost. The interest cost component is added to the interest expense denominator under Moody's adjusted methodology. |
+
+**Item 2c — Operating Lease Interest Component**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Lease Footnote (same note as described in Leverage Formula 2 — typically Note 5–8) |
+| Available in | 10-K and 10-Q (post-ASC 842) |
+| Exact location within footnote | The "Lease Cost" table in the Lease Footnote, which breaks down total lease cost into: operating lease cost, finance lease interest cost, and finance lease amortization. For operating leases, the interest component is not separately stated — Moody's estimates it as 1/3 of total annual operating lease expense. |
+| What LLM should extract | Total annual operating lease expense (same figure used in Leverage Formula 2). The system then applies the 1/3 rule to derive the interest component for the denominator adjustment. |
+
+---
+
+**Formula 3 — S&P-Style Adjustments**
+
+**Item 3a — Current Year Operating Lease Payments (for Fixed Charges denominator)**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Lease Footnote — maturity schedule table |
+| Available in | 10-K and 10-Q |
+| Exact location within footnote | The operating lease maturity table shows future minimum lease payments by year. The first row — "Less than 1 year" or "2025" (the next fiscal year) — is the current year payment used in S&P's fixed charges denominator. This is the full lease payment, not just the interest component, which is what distinguishes S&P from Moody's on this item. |
+| What LLM should extract | Single number: operating lease payments due within the next 12 months from the maturity schedule. |
+
+**Item 3b — Preferred Dividends (for Fixed Charges denominator)**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Equity section of the Balance Sheet AND Dividends footnote or Equity footnote (typically Note 10–15, titled "Stockholders' Equity" or "Capital Stock") |
+| Available in | 10-K and 10-Q |
+| Exact location | Income statement may show "Preferred stock dividends" as a deduction from net income attributable to common shareholders. Alternatively, the equity footnote discloses dividend rate and shares outstanding, from which the annual preferred dividend can be computed. |
+| What LLM should extract | Total preferred dividends paid or declared during the period. For most corporate bond issuers this will be zero — flag if non-zero as it meaningfully reduces S&P fixed charge coverage. |
+| XBRL tag if available | `us-gaap:PreferredStockDividendsAndOtherAdjustments` — semi-structured; verify against footnote |
+
+**Item 3c — Gross vs Net Interest Expense Confirmation**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Interest Expense footnote or Note 1 (Summary of Significant Accounting Policies) |
+| Available in | 10-K and 10-Q |
+| Exact location | Note 1 or a standalone interest footnote will describe the company's policy on presenting interest income and expense — whether gross or net. S&P uses gross interest expense. If the company reports only net interest, LLM must extract gross interest expense from the footnote breakdown. |
+| What LLM should extract | Confirmation of gross vs net presentation. If net: extract (1) gross interest expense and (2) interest income separately so the system can use gross interest in the denominator. |
+
+---
 
 
 
@@ -280,3 +371,21 @@ Supplementary: EBITDA Coverage = (Operating Income + D&A) / Interest Expense
 | **Implementation phase** | Phase 2 | Phase 3 | Phase 3 |
 
 ---
+
+
+## Appendix C
+
+**Summary Table — Where Each Item Lives**
+
+| Item | Formula | Statement / Document | Section | 10-K Only or Both |
+|---|---|---|---|---|
+| Operating Income (EBIT) | F1 | Income Statement | Operating section | Both |
+| Interest Expense | F1 | Income Statement | Non-operating / Other expense section | Both |
+| Capitalized interest | F2 | PP&E Footnote | Capitalized interest disclosure | 10-K only (usually) |
+| Pension interest cost | F2 | Pension Footnote | Net Periodic Benefit Cost table | 10-K only |
+| Operating lease interest component | F2 | Lease Footnote | Lease Cost table | Both |
+| Current year lease payments | F3 | Lease Footnote | Maturity schedule — Year 1 row | Both |
+| Preferred dividends | F3 | Income Statement + Equity Footnote | Below net income / Equity note | Both |
+| Gross interest confirmation | F3 | Note 1 or Interest Footnote | Accounting policies or interest breakdown | Both |
+
+
