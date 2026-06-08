@@ -737,6 +737,86 @@ Academic research consistently identifies interest coverage below 1.5x as a stro
 
 ---
 
+## Signal Timing — Interest Coverage
+
+---
+
+### Classification
+
+**Early to coincident — faster moving than leverage, with one critical lead advantage.**
+
+Interest coverage is a flow measure, not a stock measure. This is the fundamental difference from leverage. Leverage reflects accumulated debt — it changes slowly because debt levels change slowly. Coverage reflects the current period's earnings relative to the current period's interest bill — it can deteriorate sharply in a single quarter if EBITDA falls or interest costs rise, even if the debt stock has not changed at all.
+
+This makes coverage a faster signal than leverage in most stress scenarios, and in some scenarios — particularly earnings shocks — it provides earlier warning than leverage does.
+
+---
+
+### The Three Deterioration Paths and Their Timing
+
+Coverage can deteriorate through three distinct paths, each with a different signal speed:
+
+**Path 1 — Earnings collapse (fastest, 1–2 quarters)**
+
+A sudden revenue shock, margin compression, or large one-time charge collapses EBITDA in a single quarter. Interest expense does not change because the debt stock has not changed. Coverage falls immediately and sharply. The signal appears in the first 10-Q after the event — typically within 40 days of quarter-end for a large accelerated filer. If the earnings press release (8-K Item 2.02) is filed 14–25 days before the 10-Q, your system gets a directional signal approximately 15–25 days earlier than the structured XBRL data.
+
+This is the fastest-moving credit stress scenario your system will encounter. A company with 5.0x coverage in Q1 can be at 2.5x coverage by Q2 if EBITDA is cut in half. Leverage would barely move in the same period because total debt has not changed.
+
+**Path 2 — Interest cost increase (medium, 2–4 quarters)**
+
+Maturing fixed-rate debt is refinanced at higher rates, or floating-rate debt reprices upward as market rates rise. Interest expense increases gradually across multiple quarters as tranches mature and are refinanced. EBITDA may be stable. Coverage drifts downward over 2–4 quarters. This path is slower than Path 1 but more predictable — the maturity schedule (Debt Maturity Wall metric) gives advance warning of when refinancing will occur, allowing your system to project coverage deterioration before it appears in reported figures.
+
+**Path 3 — Simultaneous compression (most dangerous, confirms distress)**
+
+Both EBITDA falls and interest costs rise at the same time. This is the classic leveraged credit stress scenario — a deteriorating business environment reduces earnings while rising credit spreads increase refinancing costs. Coverage deteriorates faster than either path alone. When your system detects simultaneous movement in both the numerator and denominator, escalate immediately regardless of the absolute level.
+
+---
+
+### Three-Tier Timing Structure
+
+Identical framework to Leverage, with one important difference: the Item 2.02 lead advantage is more valuable for coverage than for leverage because earnings are the primary driver of coverage deterioration, and earnings are what the press release discloses first.
+
+| Tier | Source | Data Quality | Lag After Quarter-End | Lead Before 10-Q | Use in System |
+|---|---|---|---|---|---|
+| **Tier 1 — Full recompute** | 10-Q / 10-K | Reviewed (10-Q) or audited (10-K); structured XBRL; Formula 1 computable | **+40 days** (large accelerated filer) | n/a | Primary coverage ratio; triggers all alerts |
+| **Tier 2 — Early directional signal** | 8-K Item 2.02 earnings press release | Preliminary; unaudited; company-defined EBITDA; unstructured text | **+14 to +25 days** (empirically: JPM Q1 2026 = +14 days) | **−15 to −25 days before 10-Q** | Directional signal only; does not replace Tier 1; Phase 3 only |
+| **Tier 3 — Real-time event trigger** | 8-K Item 2.03 / 2.04 | Event disclosure only; no income statement data | **Within 4 business days of event** | Can occur any time intra-quarter | 2.04: automatic Stress alert; 2.03: debt increase noted but coverage cannot be updated without new EBITDA |
+
+**Critical asymmetry vs Leverage:** For leverage, an intra-quarter 8-K Item 2.03 (new debt) allows a partial ratio update because debt changed but EBITDA did not. For coverage, an intra-quarter debt event changes interest expense — but the new interest expense will only be fully reflected in the next quarterly filing. A company that draws $500M on its revolver in month 2 of the quarter will show higher interest expense in the next 10-Q, but the current quarter's interest expense figure is already partially committed. Your system should note the debt event and flag that forward coverage will likely be lower, but cannot recompute the ratio intra-quarter with precision.
+
+---
+
+### Staleness Analysis
+
+Identical staleness structure to Leverage — the data is between 40 and 182 days old depending on where in the quarterly cycle the filing arrives. The full staleness table from the Leverage Signal Timing section applies here without modification.
+
+One coverage-specific addition: interest expense is a duration item that accrues daily. A company that issues $1B of new 8% bonds on the first day of Q3 will show the full quarter's interest on those bonds in the Q3 10-Q. A company that issues the same bonds on the last day of Q3 will show almost no interest in Q3 — it appears fully only in Q4. This means the timing of debt issuance within a quarter affects how quickly the interest expense impact shows up in reported figures, creating up to one full quarter of additional lag between a debt event and its full coverage impact appearing in filed financials.
+
+---
+
+### Comparison: Coverage vs Leverage Signal Speed
+
+| Scenario | Coverage Signal Speed | Leverage Signal Speed | Which Leads |
+|---|---|---|---|
+| EBITDA falls sharply (revenue shock) | **Fast — 1 quarter** | Slow — leverage barely moves | **Coverage leads** |
+| New debt issued | Slow — interest expense rises gradually as debt is drawn and accrues | **Fast — debt increases immediately** | **Leverage leads** |
+| Interest rates rise on refinancing | Medium — 2–4 quarters as tranches mature | Slow — principal unchanged | **Coverage leads** |
+| Both EBITDA falls and debt rises | **Fastest — same quarter** | Fast — same quarter | Simultaneous — dual alert |
+| Gradual margin erosion over years | Medium — visible after 3–4 quarters of trend | Medium — similar speed | Neither leads clearly |
+
+**System implication:** Coverage and leverage are complementary, not redundant. Coverage leads in earnings-driven stress. Leverage leads in debt-accumulation stress. Running both simultaneously and flagging when either or both deteriorate gives the system broader detection capability than either metric alone.
+
+
+> **Phase 2 note:** In Phase 2, Tier 2 and Tier 3 are not yet implemented. Only Tier 1 (10-Q/10-K) is used.
+
+### Updated Signal Timing Summary
+
+> **Signal Timing — Early to coincident, faster than leverage for earnings-driven stress.**
+>
+> Interest coverage is a flow measure that responds within a single quarter to earnings shocks — the fastest of the primary credit metrics. Tier 1 structured data arrives 40 days after quarter-end. Tier 2 directional signal (Item 2.02 press release) arrives 14–25 days after quarter-end — approximately 15–25 days before the 10-Q — and is particularly valuable for coverage because earnings are what the press release discloses first.
+>
+> A falling coverage trend across 2–3 consecutive quarters is a strong early warning signal even if the absolute level has not crossed a stress threshold. A single-quarter drop of ≥ 1.0x should trigger an immediate trend flag regardless of absolute level. A coverage ratio below 1.0x on an EBIT basis is an automatic critical escalation regardless of band classification.
+>
+> Coverage leads leverage in earnings-driven stress scenarios. Leverage leads coverage in debt-accumulation scenarios. The two metrics should always be evaluated together — simultaneous deterioration in both is the strongest quantitative stress signal the system can produce from structured data alone.
 
 
 
