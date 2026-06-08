@@ -42,3 +42,116 @@ A company whose free cash flow is positive but declining — from $500M to $300M
 FCF Margin = Free Cash Flow / Revenue
 
 This enables comparison across companies of different sizes and across time as a company grows or shrinks. A company with $200M of FCF on $10B of revenue (2% FCF margin) is in a very different position from a company with $200M of FCF on $1B of revenue (20% FCF margin), even though the absolute cash generation is identical.
+
+
+## Why it signals stress
+
+Free cash flow signals stress through four mechanisms, each operating on a different timeline and with a different relationship to the other metrics in this spec.
+
+### Mechanism 1 — The self-funding test (immediate)
+
+- A company with negative free cash flow is not self-funding. Every quarter it runs negative FCF, it must find external capital — new debt, new equity, asset sales, or drawing down existing cash reserves — to bridge the gap between what it earns operationally and what it spends.
+- This is not automatically a crisis. Companies can run negative FCF for extended periods during investment phases, particularly in capital-intensive industries where large upfront capex precedes years of cash generation.
+- The question your system must answer is whether the negative FCF reflects **intentional investment** or **structural deterioration**.
+
+| Type | Accompanying Signs |
+|------|---------------------|
+| Intentional investment FCF deficits | Rising EBITDA, stable or improving coverage, management guidance on when the investment cycle ends |
+| Structural deterioration FCF deficits | Falling EBITDA, declining coverage, no credible path back to positive FCF |
+
+- Your system cannot make this distinction from numbers alone — it requires the LLM layer reading management commentary in the MD&A. But the numbers provide the trigger for that deeper investigation.
+
+**The immediate stress signal:**
+- When FCF turns negative after a sustained period of positive generation → flag immediately
+- The first negative quarter → may be noise
+- Two consecutive negative quarters → a pattern
+- Three consecutive negative quarters → severe. The company has been drawing on reserves or borrowing for at least nine months. Whatever external funding has been sustaining it is being depleted.
+
+---
+
+### Mechanism 2 — The debt service reality check (medium term)
+
+- Interest coverage and leverage tell you about the relationship between **earnings** and debt.
+- Free cash flow tells you about the relationship between **cash** and debt service.
+- These are not the same thing. A company can have comfortable interest coverage (EBITDA of 4x interest expense) but still generate no free cash flow after capex, working capital, and taxes. In that case, while the interest payment is technically covered by earnings, the cash to actually make the payment is coming from somewhere other than operations.
+
+**The divergence between coverage and FCF** is one of the most reliable early warning patterns in credit analysis. When a company shows deteriorating FCF alongside stable or healthy coverage ratios, it typically means one of three things:
+
+1. **Capex is rising faster than earnings** (investment risk)
+2. **Working capital is consuming cash** (operational risk)
+3. **The quality of EBITDA is declining** (accounting risk — earnings are being recognised but not collected as cash)
+
+All three are stress signals that would be invisible if the analyst looked only at leverage and coverage.
+
+**The medium-term stress signal:**
+- A persistent gap between EBITDA and operating cash flow — where EBITDA is stable or growing but OCF is declining — indicates working capital deterioration or earnings quality problems.
+- **Flag when OCF/EBITDA conversion ratio falls below 70% for two consecutive quarters.** This means the company is only converting 70 cents of every dollar of EBITDA into actual cash, with the remainder trapped in working capital or lost to non-cash adjustments reversing.
+
+---
+
+### Mechanism 3 — The liquidity runway indicator (forward looking)
+
+- Free cash flow, combined with the current cash balance, tells you **how long a company can sustain its current trajectory** before running out of liquidity.
+- This is the most forward-looking signal FCF provides and the one most directly relevant to default prediction.
+
+**Example:**
+A company with $500M of cash burning $100M of FCF per quarter has approximately five quarters of runway before cash is exhausted — assuming no debt maturities, no covenant breaches, and no deterioration in the burn rate. In practice, all three of those assumptions tend to fail simultaneously in distressed situations: the burn rate accelerates as the business deteriorates, a debt maturity arrives requiring cash, and the deteriorating coverage triggers a covenant.
+
+The runway calculation gives your system a quantitative estimate of how much time exists before a liquidity crisis, which directly informs how urgently the alert should be escalated.
+
+**The forward-looking stress signal:**
+- Compute implied quarters of runway = current cash / absolute value of quarterly FCF burn
+- **Flag when runway falls below 6 quarters**
+- **Escalate to Stress when runway falls below 3 quarters**
+
+This is the metric most directly predictive of near-term default timing.
+
+---
+
+### Mechanism 4 — The upstream signal (earliest warning)
+
+Of all the metrics in this spec, free cash flow compression is typically the **first** to appear in a deteriorating credit story.
+
+**The sequence in most corporate distress cases follows a consistent pattern:**
+
+| Step | Event | What is visible |
+|------|-------|-----------------|
+| **1** | Free cash flow begins to compress | Revenue slows, costs rise, or capex increases. Visible in cash flow statement before income statement. |
+| **2** | EBITDA begins to decline | Revenue and cost pressures flow through to earnings. Leverage starts to rise. Coverage starts to fall. |
+| **3** | Balance sheet deteriorates | Cash burn reduces cash reserves, forces additional borrowing. Leverage reaches stress thresholds. |
+| **4** | Triggering event occurs | Debt maturity, covenant breach, ratings downgrade — converts latent stress into acute credit event. |
+
+**Free cash flow compression appears in step one.** Leverage and coverage deterioration appear in step two. Balance sheet stress appears in step three. The credit event is step four.
+
+A system that monitors only leverage and coverage is entering the sequence at step two — already one step behind the earliest available signal.
+
+**The earliest warning signal:**
+- **A declining FCF trend across 3–4 consecutive quarters — even if FCF remains positive — is the earliest quantitative stress signal in this system.**
+- It should trigger a **Watch alert** before any other metric has moved into a stress band.
+- This is the primary reason FCF is included alongside leverage and coverage rather than treated as a derivative metric.
+
+---
+
+### Institutional validation
+
+| Source | Content |
+|--------|---------|
+| **Moody's** | Explicitly includes "free cash flow / debt" as a standard financial metric in its cross-sector methodology, alongside Debt/EBITDA and EBIT/Interest. The ratio measures how quickly a company can repay debt from internally generated cash — a direct operationalisation of Mechanism 2. |
+| **S&P** | Includes funds from operations (FFO) to debt and free operating cash flow to debt as primary ratios in its financial risk profile assessment. Treats cash-based metrics as complementary to and sometimes more important than earnings-based metrics for assessing true debt serviceability. |
+| **Altman (1968) and subsequent literature** | Cash flow variables improve default prediction models beyond what earnings and leverage variables alone can achieve — confirming that FCF captures information about credit stress that is not fully reflected in EBITDA-based ratios. |
+
+---
+
+**Summary of alert rules from this section:**
+
+| Rule | Threshold | Alert Level |
+|------|-----------|-------------|
+| FCF negative after sustained positive | Single quarter | Flag (first may be noise) |
+| Consecutive negative FCF | 2 quarters | Confirm pattern |
+| Consecutive negative FCF | 3 quarters | Severe escalation |
+| OCF/EBITDA conversion ratio | < 70% for 2 consecutive quarters | Flag |
+| Runway (cash / quarterly burn) | < 6 quarters | Flag |
+| Runway (cash / quarterly burn) | < 3 quarters | Stress |
+| Declining FCF trend | 3–4 consecutive quarters (even positive) | Watch (earliest warning) |
+
+
