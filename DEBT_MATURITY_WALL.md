@@ -447,3 +447,866 @@ Formula 3 is a Phase 3 enhancement that unlocks the most forward-looking analyti
 The maturity wall's primary Section 6 deviation — noted in the earlier discussion of implementation parameters — is that its output is a schedule and a set of derived metrics rather than a single ratio. The data storage schema must accommodate a variable-length array of maturity data points per issuer per filing rather than a fixed set of ratio fields. This is the most significant schema difference between the maturity wall and all other metrics in this spec.
 
 
+## Where it lives — Debt Maturity Wall
+
+---
+
+**Formula 1 — Automated Baseline**
+
+All items are structured, on the face of financial statements, available in both 10-K and 10-Q.
+
+| Input | Financial Statement | Exact Line Item | Available In |
+|---|---|---|---|
+| Current portion of LT debt | Balance Sheet — Current Liabilities section | "Current portion of long-term debt" or "Current maturities of long-term debt" or "Current portion of term debt" | 10-K and 10-Q |
+| Short-term borrowings | Balance Sheet — Current Liabilities section | "Short-term borrowings" or "Short-term debt" | 10-K and 10-Q |
+| Commercial paper | Balance Sheet — Current Liabilities section | "Commercial paper" | 10-K and 10-Q |
+| Cash & equivalents | Balance Sheet — Current Assets section | "Cash and cash equivalents" | 10-K and 10-Q |
+| Short-term investments | Balance Sheet — Current Assets section | "Short-term investments" or "Marketable securities, current" | 10-K and 10-Q |
+
+**Note on current portion reclassification timing:** The reclassification of long-term debt to current happens at the balance sheet date when the maturity falls within 12 months of that date. For a December 31 fiscal year company, debt maturing before December 31 of the following year appears as a current liability. This means the current portion figure changes every quarter as new maturities enter the 12-month window and prior maturities are repaid or refinanced. Tracking the quarter-over-quarter change in current portion is itself a useful signal — a sudden increase indicates a large maturity has entered the 12-month window.
+
+---
+
+**Formula 2 — Full Maturity Schedule**
+
+**Correction from original draft:** The original draft classified the full maturity schedule as entirely unstructured (LLM only). This was incorrect. The US GAAP taxonomy contains standard XBRL tags for individual year maturities that are queryable via the EDGAR companyconcept API. However, filer adoption is inconsistent — many companies populate these tags, many do not. The correct classification is **semi-structured**: attempt XBRL extraction first, fall back to LLM extraction for missing years or reconciliation failures.
+
+---
+
+**Item 2a — Debt Maturity Schedule Table**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Debt Footnote (typically Note 5–9, titled "Debt," "Long-Term Debt," "Borrowings," or "Credit Facilities") AND EDGAR XBRL companyconcept API |
+| Available in | 10-K — full five-year schedule required under US GAAP; 10-Q — XBRL tags may be present if company updates them quarterly; LLM footnote schedule usually absent from 10-Q |
+| Exact location — structured | EDGAR companyconcept API: `data.sec.gov/api/xbrl/companyconcept/CIK{number}/us-gaap/{tag}.json` for each of the six maturity tags listed below |
+| Exact location — unstructured | Debt Footnote table titled "Maturities of Long-Term Debt," "Scheduled Debt Maturities," "Future Principal Payments," or "Aggregate Annual Maturities." The table shows amounts due in each of the next five fiscal years and the aggregate amount due thereafter. Almost always present in the 10-K. |
+| What to extract | Six numbers: Year 1 through Year 5 maturities and the Thereafter bucket. Also extract the total — verify it equals total debt disclosed on the balance sheet. |
+| Fiscal year vs calendar year note | Year labels in the maturity table are fiscal years not calendar years. A company with a March 31 fiscal year-end will show Year 1 as the 12 months ending March 31 of the following year. Store all maturity amounts with explicit fiscal year-end dates not generic year labels. |
+| 10-Q availability | Most companies do not update the full LLM-readable maturity schedule in 10-Q filings. XBRL tags may update quarterly for companies that populate them. If XBRL tags are absent and no updated footnote table is present in the 10-Q, use the most recent 10-K schedule adjusted for any debt events since that filing. Flag: "maturity schedule from [10-K date] — updated for [debt events if any]; full update pending next 10-K." |
+
+**XBRL tags for maturity schedule (attempt before LLM):**
+
+| Year | XBRL Tag |
+|---|---|
+| Year 1 (next 12 months) | `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInNextTwelveMonths` |
+| Year 2 | `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInYearTwo` |
+| Year 3 | `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInYearThree` |
+| Year 4 | `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFour` |
+| Year 5 | `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFive` |
+| Thereafter | `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalAfterYearFive` |
+
+**Reconciliation check — mandatory before using XBRL maturity data:**
+
+```
+Sum of all six XBRL maturity tags must reconcile to total debt:
+
+Sum = Year1 + Year2 + Year3 + Year4 + Year5 + Thereafter
+
+Compare to: us-gaap:LongTermDebt
+         OR us-gaap:DebtAndCapitalLeaseObligations
+
+Case 1 — Sum reconciles within 5% of total debt:
+   Use XBRL maturity tags as primary source
+   Flag: "maturity schedule from XBRL tags —
+   reconciled to total debt (within 5% tolerance)"
+
+Case 2 — Difference between 5% and 10%:
+   Use XBRL maturity tags but flag:
+   "maturity schedule reconciliation discrepancy exceeds 5% 
+    but is less than 10% — investigate source
+    (unamortized discount, issuance costs, leases)
+    before relying on XBRL data"
+   Store XBRL data as provisional; mark for manual review
+
+Case 3 — Difference exceeds 10%:
+   Discard XBRL maturity tags entirely
+   Escalate to full LLM extraction from Debt Footnote
+   Flag: "XBRL maturity tags discarded (reconciliation
+   failure >10%) — full LLM extraction required"
+
+Case 4 — Any individual year tag is null while total debt non-zero:
+   Flag which specific years are missing:
+   "Year [N] maturity tag absent — LLM extraction
+   required for missing year(s)"
+   Use XBRL for populated years
+   Use LLM for missing years
+   Re-verify reconciliation after combining both
+
+Case 5 — All six tags are null:
+   Full LLM extraction required
+   Flag: "no XBRL maturity tags found —
+   full LLM extraction from Debt Footnote"
+   This is expected for a significant proportion of filers
+```
+
+**Why the reconciliation check is mandatory:** Even when all six tags are populated, they may not sum correctly if the company has also tagged finance lease obligations within the debt tags, uses a non-standard fiscal year convention, or has partially updated tags mid-year. A reconciliation failure with populated tags is more dangerous than absent tags because it creates a silently incorrect maturity schedule.
+
+**Fallback for missing XBRL tags — Phase 2 only:**
+
+If XBRL maturity tags for Year 1 are absent or zero (and not recoverable via LLM in Phase 2):
+   Use `us-gaap:LongTermDebtCurrent` as an estimate for Year 1 maturities
+   Flag: "Year 1 maturity not tagged in XBRL — estimated using
+          LongTermDebtCurrent figure from balance sheet;
+          actual Year 1 maturity may be understated if
+          short-term borrowings also due within 12 months
+          or overstated if LongTermDebtCurrent includes
+          finance lease obligations"
+   Do NOT attempt to estimate Year 2-5 maturities from any source
+   in Phase 2 — mark Year 2-5 as null and flag "Phase 2 limitation"
+
+---
+
+**Item 2b — Revolving Credit Facility Maturity**
+
+Unchanged from original draft.
+
+| Field | Detail |
+|---|---|
+| Where it lives | Debt Footnote — revolving credit facility description paragraph (same location as Liquidity Formula 2 Item 2a) |
+| Available in | 10-K and 10-Q |
+| Exact location | Revolving credit facility description paragraph. The maturity date is typically stated explicitly: "the revolving credit facility matures on [date]." |
+| What LLM should extract | Maturity date of the revolving credit facility. This does not appear in the maturity schedule table because revolvers are not term debt — they are committed facilities with no scheduled principal amortisation. Store separately from the term debt maturity schedule. Flag if maturity within 18 months: "revolving credit facility maturing [date] — primary liquidity backstop at risk; renewal required." |
+
+---
+
+**Item 2c — Debt Covenant Acceleration Provisions**
+
+Unchanged from original draft.
+
+| Field | Detail |
+|---|---|
+| Where it lives | Debt Footnote — covenant description section AND credit agreement (Exhibit 10.x filed with the 10-K or 8-K) |
+| Available in | 10-K primarily; updated in 10-Q if material changes |
+| Exact location | Covenant section of the Debt Footnote. Look for language describing cross-default provisions, change of control provisions, and financial maintenance covenants whose breach triggers acceleration. |
+| What LLM should extract | Three items: (1) whether cross-default provisions exist and which instruments they link, (2) whether change of control provisions exist and their terms, (3) whether any covenant breach has occurred or is disclosed. |
+| Why this matters | Cross-default provisions convert a scheduled future maturity into a potentially immediate event — a covenant breach can accelerate debt due in years 3–5 into a year-1 equivalent obligation. |
+
+---
+
+**Formula 3 — Tranche-Level Analysis (LLM extraction)**
+
+All four items unchanged from original draft.
+
+**Item 3a — Individual Debt Tranche Descriptions**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Debt Footnote — long-term debt summary table AND individual instrument descriptions |
+| Available in | 10-K primarily; 10-Q includes current balances but less descriptive detail |
+| Exact location | The Debt Footnote contains: (1) a summary table listing all outstanding instruments with carrying value, interest rate, and maturity; (2) descriptive paragraphs for each major instrument type. |
+| What LLM should extract | For each instrument: principal amount, exact maturity date, coupon rate and type, instrument type, secured or unsecured status, callable status and call date if applicable. |
+
+**Item 3b — Floating Rate Debt Reference Rate and Spread**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Debt Footnote — individual instrument descriptions OR Note 1 (interest rate risk section) |
+| Available in | 10-K and 10-Q |
+| Exact location | Debt description specifies reference rate and spread: "SOFR plus 2.50%." Market risk footnote summarises total floating rate exposure. |
+| What LLM should extract | For each floating rate tranche: reference rate, spread in basis points, any rate floor, current effective rate if disclosed. |
+
+**Item 3c — Callable and Puttable Debt Features**
+
+| Field | Detail |
+|---|---|
+| Where it lives | Debt Footnote — individual instrument descriptions |
+| Available in | 10-K primarily |
+| Exact location | Call features: "the notes are callable at [price] on or after [date]." Put features: "holders may require the company to repurchase the notes at par upon [event]." |
+| What LLM should extract | For callable instruments: first call date and call price. For puttable instruments: put date and put price. For convertible notes: conversion price, conversion date, and current stock price relative to conversion price. |
+
+**Item 3d — New Debt Issuance Tenor (from 424B and 8-K Item 2.03)**
+
+| Field | Detail |
+|---|---|
+| Where it lives | 424B prospectus filings AND 8-K Item 2.03 |
+| Available in | Filed on pricing date (424B) or within 4 business days (Item 2.03) |
+| Exact location | 424B cover page: principal amount, interest rate, maturity date in offering summary table. 8-K Item 2.03: maturity date in agreement description. |
+| What LLM should extract | For each new issuance: principal amount, maturity date, coupon rate, instrument type. Used to compute new issuance tenor for refinancing tenor analysis. |
+
+---
+
+**Summary Table — Where Each Item Lives**
+
+| Item | Formula | Statement / Document | Section | Structured or Unstructured | 10-K Only or Both |
+|---|---|---|---|---|---|
+| Current portion of LT debt | F1 | Balance Sheet | Current Liabilities | Structured — XBRL | Both |
+| Short-term borrowings / CP | F1 | Balance Sheet | Current Liabilities | Structured — XBRL | Both |
+| Cash & equivalents | F1 | Balance Sheet | Current Assets | Structured — XBRL | Both |
+| Short-term investments | F1 | Balance Sheet | Current Assets | Structured — XBRL | Both |
+| Debt maturity schedule Year 1–5 + thereafter | F2 | XBRL API + Debt Footnote | Maturity tags + maturity table | **Semi-structured — XBRL first, LLM fallback** | 10-K primarily; XBRL may update quarterly |
+| Revolving credit facility maturity date | F2 | Debt Footnote | Facility description paragraph | Unstructured — LLM | Both |
+| Covenant acceleration provisions | F2 | Debt Footnote + Exhibit 10.x | Covenant section + credit agreement | Unstructured — LLM | 10-K primarily |
+| Individual tranche descriptions | F3 | Debt Footnote | Summary table + instrument paragraphs | Unstructured — LLM | 10-K primarily |
+| Floating rate reference rate and spread | F3 | Debt Footnote + Note 1 | Instrument descriptions + market risk section | Unstructured — LLM | Both |
+| Call and put features | F3 | Debt Footnote | Instrument description paragraphs | Unstructured — LLM | 10-K primarily |
+| New issuance tenor | F3 | 424B + 8-K Item 2.03 | Cover page + filing text | Unstructured — LLM | Both (event-driven) |
+| Cross-default provisions | F2 | Debt Footnote | Covenant section | Unstructured — LLM | 10-K primarily |
+
+---
+
+**Critical Note on 10-Q Maturity Schedule Availability**
+
+The maturity schedule is the most analytically important item in this metric and the one with the most variable availability across filing types. The table below now reflects the corrected two-path extraction approach:
+
+| Filing Type | XBRL Tag Availability | LLM Footnote Table Availability | System Action |
+|---|---|---|---|
+| 10-K | Tags present if company populates them — attempt first | Full five-year schedule always present | Attempt XBRL → reconcile → LLM for failures or gaps; store as annual baseline |
+| 10-Q (Q1) | Tags may update quarterly for some filers — attempt | Usually absent | Attempt XBRL → if reconciled use; if not: use 10-K baseline adjusted for Q1 debt events |
+| 10-Q (Q2) | Same as Q1 | Usually absent; more likely present if significant debt changes | Same as Q1 |
+| 10-Q (Q3) | Same as Q1 | Usually absent | Same as Q1 |
+| 8-K Item 2.03 | Not available | Not available — describes new debt event only | Extract new tranche details; patch into rolling maturity schedule |
+| 424B | Not available | Not available — describes new issuance only | Extract new tranche; patch into rolling maturity schedule |
+
+**Implication:** Between annual 10-K filings, the maturity schedule stored by your system is a living document that must be updated for debt events rather than replaced wholesale. The system maintains a rolling maturity schedule anchored to the most recent 10-K and patched with intra-year debt events. XBRL tags provide quarterly updates where companies populate them — use these as a lightweight refresh mechanism rather than waiting for the next 10-K. This is the most complex data maintenance requirement of any metric in the spec and represents the primary implementation challenge for the Debt Maturity Wall in Phase 3.
+
+**Key change from original draft summarised:** Item 2a classification changed from "unstructured — LLM only" to "semi-structured — XBRL first with mandatory reconciliation check, LLM fallback." All other items unchanged. The Summary Table and the 10-Q Availability Table have been updated to reflect this reclassification.
+
+
+## Structured or Unstructured — Debt Maturity Wall Metric (All Three Formulas)
+
+| Input / Component | Formula | XBRL Tag | Structured or Unstructured | Notes |
+|---|---|---|---|---|
+| **Current Portion of LT Debt** | F1 | Primary: `us-gaap:LongTermDebtCurrent` Fallback: `us-gaap:DebtCurrent` | Structured — with double-count risk | Same extraction logic as Leverage Formula 1. `DebtCurrent` may aggregate short-term borrowings already captured separately — check for overlap before summing. Represents only the Year 1 component of the maturity wall visible from balance sheet XBRL. |
+| **Short-Term Borrowings** | F1 | Primary: `us-gaap:ShortTermBorrowings` Fallback 1: `us-gaap:CommercialPaper` Fallback 2: `us-gaap:NotesPayableCurrent` Fallback 3: `us-gaap:LineOfCreditCurrent` | Structured — must sum all non-null values | Same Apple validation finding applies — sum all non-null tags; not mutually exclusive. Commercial paper and drawn revolver can coexist. |
+| **Cash & Equivalents** | F1 | Primary: `us-gaap:CashAndCashEquivalentsAtCarryingValue` Fallback 1: `us-gaap:CashCashEquivalentsAndShortTermInvestments` Fallback 2: `us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents` | Structured — with restriction risk | Same extraction logic as Leverage and Liquidity metrics. Fallback 2 includes restricted cash — subtract `us-gaap:RestrictedCashAndCashEquivalents` if available; flag if not. |
+| **Short-Term Investments** | F1 | Primary: `us-gaap:ShortTermInvestments` Fallback: `us-gaap:MarketableSecuritiesCurrent` | Structured — with bundling risk | Check for overlap with cash tag. If `CashCashEquivalentsAndShortTermInvestments` was used for cash, do not add short-term investments separately. |
+| **Near-Term Maturity Total** (derived F1) | F1 | No standard tag | Structured inputs, derived result | = LongTermDebtCurrent + ShortTermBorrowings + CommercialPaper (sum all non-null). Represents Year 1 maturity wall only. If all components null → Near-Term Maturity = null → Maturity Coverage Ratio = null. |
+| **Maturity Coverage Ratio** (derived F1) | F1 | No standard tag | Structured inputs, derived result | = (Cash + ShortTermInvestments) / Near-Term Maturity. Phase 2 cash only — revolver excluded; flag. Phase 3 adds revolver from LLM. If Near-Term Maturity = 0: ratio = undefined — flag as "no near-term debt maturities; maturity coverage adequate by definition." If Near-Term Maturity null → ratio null. |
+| **Year 1 Maturity** | F2 | Primary: `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInNextTwelveMonths` | **Semi-structured — XBRL first, LLM fallback** | Attempt XBRL tag first. If null or fails reconciliation: escalate to LLM extraction from Debt Footnote maturity table. Note: this tag covers term debt maturities only — it may differ from `LongTermDebtCurrent` on the balance sheet because the balance sheet current portion includes all short-term debt reclassifications while this tag covers only scheduled principal repayments. Cross-check both and flag discrepancies. |
+| **Year 2 Maturity** | F2 | Primary: `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInYearTwo` | **Semi-structured — XBRL first, LLM fallback** | Same extraction approach as Year 1. Not available from balance sheet — only from XBRL maturity tag or Debt Footnote. If null after XBRL attempt: LLM extraction required. |
+| **Year 3 Maturity** | F2 | Primary: `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInYearThree` | **Semi-structured — XBRL first, LLM fallback** | Same as Year 2. |
+| **Year 4 Maturity** | F2 | Primary: `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFour` | **Semi-structured — XBRL first, LLM fallback** | Same as Year 2. |
+| **Year 5 Maturity** | F2 | Primary: `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFive` | **Semi-structured — XBRL first, LLM fallback** | Same as Year 2. |
+| **Thereafter Maturity** | F2 | Primary: `us-gaap:LongTermDebtMaturitiesRepaymentsOfPrincipalAfterYearFive` | **Semi-structured — XBRL first, LLM fallback** | Same as Year 2. Represents aggregate of all maturities beyond year 5 — not individually year-by-year. |
+| **Maturity Schedule Reconciliation** (derived F2) | F2 | No standard tag | Structured inputs, derived verification | Sum of six maturity tags must reconcile to total debt within 5% tolerance. If reconciliation fails: escalate all years to LLM. If reconciliation passes: use XBRL tags as authoritative; store LLM extraction as verification only. This check is mandatory before any maturity schedule is used for alert computation. |
+| **Maturity Concentration Ratio** (derived F2) | F2 | No standard tag | Structured inputs, derived result | = Maturities in year n / Total Debt. Computed for each year once schedule is established. Flag if any single year > 30% of total debt. Flag if > 50% as severe concentration. |
+| **Near-Term Ratio** (derived F2) | F2 | No standard tag | Structured inputs, derived result | = (Year 1 + Year 2) / Total Debt. Flag if > 40%. |
+| **Weighted Average Debt Maturity** (derived F2) | F2 | No standard tag | Structured inputs, derived result | = Σ (Year n Maturity × Years to Maturity n) / Total Debt. Uses convention: Year 1=1.0, Year 2=2.0, Year 3=3.0, Year 4=4.0, Year 5=5.0, Thereafter=7.0. Flag if WADM < 3.0 years. Flag if WADM declining across consecutive annual filings. |
+| **Liquidity-to-Maturity Coverage** (derived F2) | F2 | No standard tag | Semi-structured inputs, derived result | Full Coverage = Available Liquidity (cash + revolver) / Year 1 Maturities. Extended Coverage = (Available Liquidity + Projected Annual FCF) / (Year 1 + Year 2 Maturities). Revolver component requires LLM extraction (Phase 3). FCF from Formula 1 of FCF metric. Flag if Full Coverage < 1.0x. |
+| **Revolving Credit Facility Maturity Date** | F2 | No standard tag | **Unstructured — LLM required** | Lives in Debt Footnote revolving credit facility description paragraph. LLM extracts maturity date — store as date field not dollar amount. Critical: revolver maturing within 18 months triggers flag regardless of other metrics. Revolvers do not appear in the standard maturity schedule table — must be tracked separately. |
+| **Covenant Acceleration Provisions** | F2 | No standard tag | **Unstructured — LLM required** | Lives in Debt Footnote covenant section and Exhibit 10.x credit agreement. LLM extracts: (1) cross-default provisions, (2) change of control provisions, (3) any disclosed covenant breach. Output is structured flags (true/false + description), not dollar amounts. A disclosed covenant breach is an automatic escalation trigger regardless of maturity schedule. |
+| **Individual Tranche Descriptions** | F3 | No standard tag at tranche level | **Unstructured — LLM required** | Lives in Debt Footnote summary table and instrument description paragraphs. LLM extracts per-tranche: principal, exact maturity date, coupon rate, coupon type, instrument type, secured status, callable status. Most analytically granular extraction in this metric. |
+| **Floating Rate Reference Rate and Spread** | F3 | No standard tag | **Unstructured — LLM required** | Lives in Debt Footnote instrument descriptions and Note 1 market risk section. LLM extracts: reference rate (SOFR, EURIBOR), spread in basis points, rate floor if any, current effective rate. Used for interest rate sensitivity analysis alongside maturity timing. |
+| **Call and Put Features** | F3 | No standard tag | **Unstructured — LLM required** | Lives in Debt Footnote instrument description paragraphs. LLM extracts: first call date and price, put date and price, convertible note conversion price and date. Put dates are economic maturities not shown in standard maturity table — must be tracked as contingent maturity obligations. |
+| **Projected Interest Rate Reset Impact** (derived F3) | F3 | No standard tag | Unstructured inputs + external market data, derived result | Requires: tranche-level coupon data (LLM), current market spreads (external data not from filing), current EBITDA and interest expense (from Leverage and Coverage metrics). Computes projected coverage compression from refinancing at current market rates. Phase 3 enhancement requiring external data integration. |
+| **New Issuance Tenor** | F3 | No standard tag | **Unstructured — LLM required** | Lives in 424B cover page and 8-K Item 2.03 filing text. LLM extracts: principal, maturity date, coupon rate, instrument type for each new issuance. Stored in separate new issuance log; reconciled to maturity schedule at each 10-K. |
+| **Refinancing Tenor Trend** (derived F3) | F3 | No standard tag | Unstructured inputs, derived result | = Weighted average tenor of new issuances vs weighted average remaining maturity of retired debt over trailing four quarters. Declining trend signals lender confidence deterioration. Requires new issuance log (from 424B + Item 2.03) and retirement log (from principal repayments in cash flow statement). |
+
+---
+
+**Quick Reference — Structured vs Unstructured by Formula**
+
+| | F1 — Baseline | F2 — Full Schedule | F3 — Tranche Level |
+|---|---|---|---|
+| **Fully structured (XBRL)** | Current LT debt, short-term borrowings, CP, cash, short-term investments | Inherits F1 structured items | Inherits F1 and F2 structured items |
+| **Semi-structured (XBRL first, LLM fallback)** | None | Year 1–5 maturity tags + Thereafter tag (with mandatory reconciliation check) | Inherits F2 semi-structured items |
+| **Fully unstructured (LLM required)** | None | Revolver maturity date, covenant acceleration provisions | Tranche descriptions, coupon details, call/put features, new issuance tenor |
+| **Derived — structured inputs** | Near-term maturity total, maturity coverage ratio (Phase 2 partial) | Concentration ratio, near-term ratio, WADM, liquidity-to-maturity coverage | Refinancing tenor trend |
+| **Derived — requires external data** | None | None | Interest rate reset impact (requires current market spreads) |
+| **LLM needed?** | ❌ No (Phase 2 revolver excluded) | ✅ Yes (revolver, covenants, fallback for XBRL gaps) | ✅ Yes (extensive) |
+| **Phase** | Phase 2 | Phase 3 | Phase 3 |
+
+---
+
+**Key Difference From Prior Metrics**
+
+All prior metrics in this spec are fully structured at Formula 1 level and introduce LLM requirements only at Formula 2 and Formula 3. The Debt Maturity Wall introduces semi-structured extraction at Formula 2 — XBRL tags exist for individual year maturities but adoption is inconsistent, making the mandatory reconciliation check a prerequisite for any maturity schedule computation. This is unique to this metric and must be reflected in the Phase 3 implementation architecture: the system needs both an XBRL extraction path and an LLM extraction path running in parallel, with the reconciliation check determining which result is used.
+
+## Extraction Fallback Logic — Debt Maturity Wall Metric
+
+---
+
+### Design Principles
+
+Same four rules as prior metrics apply, plus four additional rules specific to the Debt Maturity Wall:
+
+**Rule 1 — Never substitute zero for a missing input.** A missing Year 3 maturity tag does not mean no debt matures in Year 3. Mark null and escalate to LLM.
+
+**Rule 2 — Try every fallback before giving up.** Attempt XBRL extraction before LLM. Attempt LLM before declaring failure.
+
+**Rule 3 — Log what you used.** Every maturity figure records whether it came from XBRL, LLM, or derivation — and which specific tag or footnote location was the source.
+
+**Rule 4 — Never compute ratios from a non-reconciled schedule.** If the maturity schedule does not reconcile to total debt within 5%, do not use it for alert computation until the discrepancy is resolved. A silently wrong maturity schedule is more dangerous than a null one.
+
+**Rule 5 — The maturity schedule is a living document, not a snapshot.** Between 10-K filings, the system patches the stored schedule with debt events. Each patch must be logged with its source filing date and accession number. The schedule's provenance — which 10-K it was anchored to, which events have patched it since — must be stored alongside the schedule itself.
+
+**Rule 6 — XBRL and LLM paths run in parallel for Formula 2.** Unlike prior metrics where XBRL is primary and LLM is a fallback triggered only by XBRL failure, the Debt Maturity Wall requires both paths to be attempted and their results compared. Reconciliation determines which is used — not which path succeeded first.
+
+**Rule 7 — Year-specific null is different from full schedule null.** A single missing year (e.g. Year 3 tag absent) is less severe than a fully absent schedule. The system must handle partial schedule extraction — using XBRL for populated years and LLM for missing years — and re-verify reconciliation after combining.
+
+**Rule 8 — Covenant breach disclosure overrides all maturity schedule computations.** If a covenant breach is disclosed in the filing, the effective maturity wall may be zero quarters away regardless of what the schedule shows. Covenant breach detection runs independently of and takes priority over maturity schedule extraction.
+
+---
+
+### Component 1 — Formula 1 Inputs (Balance Sheet)
+
+These use the same fallback logic as Leverage Formula 1 and Liquidity Formula 1. Summarised here for completeness with cross-references.
+
+**Current Portion of LT Debt:**
+```
+Step 1: us-gaap:LongTermDebtCurrent
+Step 2: us-gaap:DebtCurrent
+        (double-count check — may include short-term
+        borrowings; verify before summing)
+Step 3: us-gaap:LongTermDebtAndCapitalLeaseObligationsCurrent
+        (flag: may include finance leases)
+Step 4: null → flag → escalate to manual review
+```
+
+**Short-Term Borrowings / Commercial Paper:**
+```
+Step 1: us-gaap:ShortTermBorrowings
+Step 2: us-gaap:CommercialPaper
+Step 3: us-gaap:NotesPayableCurrent
+Step 4: us-gaap:LineOfCreditCurrent
+Sum all non-null — not mutually exclusive
+If all null: ShortTermDebt = null; flag
+```
+
+**Cash and Short-Term Investments:**
+Same as Leverage Formula 1 fallback chain. Refer to that section. Restriction check applies.
+
+**Near-Term Maturity Total:**
+```
+= LongTermDebtCurrent + ShortTermBorrowings + CP
+If LongTermDebtCurrent null:
+   Near-Term Maturity = short-term components only
+   Flag: "current LT debt absent — near-term
+   maturity may be understated; Year 1 XBRL
+   tag or LLM extraction recommended"
+If all null: Near-Term Maturity = null
+```
+
+---
+
+### Component 2 — Formula 2 Maturity Schedule (Semi-Structured)
+
+This is the most complex fallback chain in the entire spec. It runs two paths simultaneously and uses reconciliation to determine the final result.
+
+---
+
+#### Path A — XBRL Extraction
+
+```
+Step A1 — Query all six maturity tags via EDGAR
+           companyconcept API:
+
+           Year1 = LongTermDebtMaturities
+                   RepaymentsOfPrincipalInNextTwelveMonths
+           Year2 = LongTermDebtMaturities
+                   RepaymentsOfPrincipalInYearTwo
+           Year3 = LongTermDebtMaturities
+                   RepaymentsOfPrincipalInYearThree
+           Year4 = LongTermDebtMaturities
+                   RepaymentsOfPrincipalInYearFour
+           Year5 = LongTermDebtMaturities
+                   RepaymentsOfPrincipalInYearFive
+           After = LongTermDebtMaturities
+                   RepaymentsOfPrincipalAfterYearFive
+
+           Use period context matching filing date to
+           ensure correct reporting period is extracted.
+           EDGAR companyconcept API returns multiple
+           periods — select the one matching the
+           current filing's period end date.
+
+Step A2 — Record which tags returned values
+           and which returned null:
+           XBRL_populated = [list of years with values]
+           XBRL_null = [list of years with null]
+
+Step A3 — If XBRL_null is empty (all six populated):
+           Proceed to reconciliation check (Step A4)
+           If XBRL_null is not empty (partial):
+           Flag: "XBRL maturity tags partially
+           populated — Years [X] absent;
+           proceeding to LLM for missing years"
+           Proceed to Path B for missing years only
+           Combine XBRL and LLM results before
+           reconciliation
+
+Step A4 — Reconciliation check (mandatory):
+           XBRL_Sum = Year1+Year2+Year3+Year4+Year5+After
+           Total_Debt = us-gaap:LongTermDebt
+                     OR us-gaap:DebtAndCapitalLeaseObligations
+
+           Tolerance = 5% of Total_Debt
+
+           If abs(XBRL_Sum - Total_Debt) <= Tolerance:
+              RECONCILED = true
+              Flag: "maturity schedule reconciled via
+              XBRL — sum within 5% of total debt"
+              Use XBRL as primary schedule
+
+           If abs(XBRL_Sum - Total_Debt) > Tolerance:
+              RECONCILED = false
+              Flag: "XBRL maturity tags do not reconcile
+              to total debt — discrepancy of $X million
+              ([Y]% of total debt); escalating to LLM
+              for full schedule extraction"
+              Proceed to Path B for full extraction
+              Do NOT use XBRL schedule for alerts
+              until reconciliation is resolved
+```
+
+---
+
+#### Path B — LLM Extraction
+
+```
+Step B1 — LLM reads Debt Footnote maturity table.
+           Target table titles:
+           "Maturities of Long-Term Debt"
+           "Scheduled Debt Maturities"
+           "Future Principal Payments"
+           "Aggregate Annual Maturities"
+           "Long-Term Debt Maturities"
+
+Step B2 — LLM extracts six figures:
+           Year 1 through Year 5 and Thereafter
+           Also extracts the total row if present.
+           Returns structured JSON:
+           {
+             "year1": X,
+             "year2": X,
+             "year3": X,
+             "year4": X,
+             "year5": X,
+             "thereafter": X,
+             "total_per_table": X,
+             "source_quote": "[verbatim table header
+                              and first row from filing]",
+             "fiscal_year_end_date": "YYYY-MM-DD",
+             "confidence": "high/medium/low"
+           }
+
+Step B3 — LLM reconciliation check:
+           If table includes a total row:
+              Verify: Year1+Year2+Year3+Year4+Year5
+                      +After ≈ total_per_table
+              If mismatch: flag "table internal
+              inconsistency — verify LLM extraction"
+           Compare LLM_Sum to Total_Debt (same
+           tolerance as Path A — 5%)
+           If reconciled: flag "maturity schedule
+           reconciled via LLM extraction"
+           If not reconciled: flag discrepancy and
+           reason if identifiable (e.g. "finance
+           leases may be included in debt total
+           but excluded from maturity table")
+
+Step B4 — LLM confidence handling:
+           If confidence = "low":
+              Flag: "LLM extraction low confidence —
+              table format may be non-standard;
+              manual verification recommended"
+              Store result but do not trigger alerts
+              based on this schedule alone
+
+Step B5 — If LLM cannot find maturity table:
+           Set LLM_Schedule = null
+           Flag: "maturity table not found in
+           Debt Footnote — verify filing structure;
+           check if company uses alternative
+           disclosure format"
+           Attempt: search other footnotes
+           (Note 1 accounting policies,
+           Commitments and Contingencies note)
+           for maturity information
+```
+
+---
+
+#### Path C — Combined Result
+
+```
+Step C1 — Determine which path(s) succeeded:
+
+Case 1: XBRL reconciled AND LLM reconciled:
+   Primary: XBRL schedule
+   Verification: LLM schedule
+   If XBRL and LLM agree within 5% per year:
+      Use XBRL as final schedule
+      Flag: "dual-path verification passed —
+      XBRL and LLM schedules consistent"
+   If XBRL and LLM disagree by >5% for any year:
+      Flag: "XBRL and LLM schedules diverge for
+      Year [N] — XBRL: $X, LLM: $Y; manual
+      review required; using LLM as conservative
+      estimate pending resolution"
+      Use higher of the two for alert computation
+      (conservative approach)
+
+Case 2: XBRL not reconciled, LLM reconciled:
+   Use LLM schedule as primary
+   Flag: "XBRL maturity tags failed reconciliation;
+   LLM schedule used as primary"
+
+Case 3: XBRL reconciled, LLM not run or failed:
+   Use XBRL schedule as primary
+   Flag: "maturity schedule from XBRL only —
+   LLM verification not available"
+
+Case 4: XBRL partial (some years populated),
+        LLM fills missing years:
+   Combine: XBRL years where populated,
+            LLM years where XBRL was null
+   Re-run reconciliation on combined schedule
+   If combined schedule reconciles: use it
+   Flag: "hybrid schedule — XBRL Years [X],
+   LLM Years [Y]"
+   If combined schedule still does not reconcile:
+   Proceed to Case 5
+
+Case 5: Neither path reconciles:
+   Use best available schedule with heavy flagging
+   Flag: "maturity schedule unreconciled —
+   total discrepancy $X million; schedule
+   used for directional analysis only;
+   do NOT trigger automated alerts based
+   on this schedule; manual review required"
+   Escalate to analyst immediately
+
+Case 6: Both paths completely failed:
+   Schedule = null
+   Flag: "maturity schedule extraction complete
+   failure — neither XBRL nor LLM produced
+   usable data; manual review required"
+   Formula 2 derived outputs = null
+   Revert to Formula 1 (balance sheet current
+   portion only) for all alert computation
+```
+
+---
+
+### Component 3 — Revolving Credit Facility Maturity (LLM)
+
+```
+Step 1 — LLM reads Debt Footnote revolving credit
+          facility description paragraph.
+          Extract maturity date as YYYY-MM-DD.
+
+Step 2 — Verify against MD&A Liquidity section:
+          MD&A often restates revolver maturity.
+          If dates conflict: use earlier date
+          (conservative) and flag discrepancy.
+
+Step 3 — Compute days to revolver maturity:
+          Days = target_date - filing_date
+
+Step 4 — Alert thresholds:
+          > 548 days (18 months): no alert
+          365–548 days (12–18 months): Watch
+          < 365 days (12 months): Flag —
+          "revolving credit facility matures
+          within 12 months — primary liquidity
+          backstop at risk; renewal required"
+
+Step 5 — If LLM cannot find revolver maturity:
+          Set Revolver_Maturity = null
+          Flag: "revolving credit facility maturity
+          not found — verify whether company has
+          a committed revolving facility"
+          Check balance sheet for drawn revolver
+          (LineOfCreditCurrent or ShortTermBorrowings)
+          If drawn amount present but maturity absent:
+          Flag: "revolver drawn but maturity date
+          not extracted — escalate to manual review"
+```
+
+---
+
+### Component 4 — Covenant Acceleration Provisions (LLM)
+
+```
+Step 1 — LLM reads Debt Footnote covenant section.
+          Target language:
+          "cross-default"
+          "event of default"
+          "acceleration"
+          "change of control"
+          "covenant breach"
+          "waiver"
+          "amendment"
+
+Step 2 — LLM extracts three binary flags
+          plus description:
+          {
+            "cross_default_exists": true/false,
+            "cross_default_description": "text",
+            "change_of_control_exists": true/false,
+            "change_of_control_description": "text",
+            "covenant_breach_disclosed": true/false,
+            "covenant_breach_description": "text",
+            "waiver_obtained": true/false,
+            "waiver_description": "text"
+          }
+
+Step 3 — Covenant breach handling:
+          If covenant_breach_disclosed = true:
+             IMMEDIATE CRITICAL ALERT
+             Flag: "covenant breach disclosed in
+             filing — debt may be subject to
+             acceleration; effective maturity
+             wall may be immediate regardless
+             of scheduled maturities"
+             Override maturity schedule alerts
+             with Critical classification
+             Cross-reference Covenant Headroom
+             metric for additional detail
+
+Step 4 — If LLM cannot find covenant section:
+          Set all flags = null
+          Flag: "covenant section not extracted —
+          acceleration risk unknown; manual
+          review recommended for leveraged issuers"
+          This is not a benign null — for high-yield
+          and leveraged issuers, covenant absence
+          from extraction is an escalation trigger
+```
+
+---
+
+### Component 5 — Rolling Maturity Schedule Maintenance
+
+This component has no equivalent in any prior metric. It governs how the stored maturity schedule is updated between annual 10-K filings.
+
+```
+Trigger: New debt event detected (8-K Item 2.03,
+         424B, 8-K Item 1.01 credit facility
+         amendment, cash flow statement repayment)
+
+Step 1 — Identify event type:
+          New issuance: adds to future maturity year
+          Repayment: subtracts from maturity year
+          Amendment: may change maturity date of
+                     existing tranche
+          Refinancing: removes old maturity,
+                       adds new maturity
+
+Step 2 — LLM extracts from triggering filing:
+          New issuance (424B / Item 2.03):
+             Principal amount
+             Maturity date → map to fiscal year
+             Coupon rate and type
+          Repayment (cash flow or Item 8.01):
+             Amount repaid
+             Instrument repaid (if identifiable)
+          Amendment (Item 1.01):
+             Original maturity date
+             New maturity date
+             Principal amount affected
+
+Step 3 — Update rolling schedule:
+          Patched_Schedule[affected_year] =
+             Prior_Schedule[affected_year]
+             + New_Issuance (if applicable)
+             - Repayment (if applicable)
+          Store patch with metadata:
+          {
+            "patch_date": "YYYY-MM-DD",
+            "patch_source": "8-K accession number
+                            or 424B accession number",
+            "event_type": "issuance/repayment/
+                           amendment/refinancing",
+            "year_affected": N,
+            "amount_change": +/- $X million
+          }
+
+Step 4 — Re-run reconciliation after each patch:
+          Patched_Sum vs Total_Debt
+          (Total_Debt also updated from Item 2.03
+          or balance sheet if new filing available)
+          If reconciliation fails after patch:
+          Flag: "rolling schedule reconciliation
+          failure after [event type] on [date] —
+          manual review required"
+
+Step 5 — At next 10-K filing:
+          Replace rolling schedule with fresh
+          10-K extraction (XBRL + LLM)
+          Reconcile fresh schedule against
+          accumulated patches — discrepancy
+          indicates a debt event was missed
+          Flag if fresh 10-K schedule differs
+          from patched schedule by >5%:
+          "maturity schedule gap detected —
+          10-K schedule differs from rolling
+          patched schedule by $X million;
+          review missed debt events between
+          [prior 10-K date] and [current 10-K date]"
+```
+
+---
+
+### Cross-Level Validation Rules
+
+**Check 1 — Year 1 XBRL tag vs balance sheet current portion**
+```
+Year1_XBRL = LongTermDebtMaturitiesRepaymentsOf
+             PrincipalInNextTwelveMonths
+Balance_Sheet_Current = LongTermDebtCurrent
+
+These two figures may legitimately differ because:
+— Balance sheet current portion includes ALL current
+  financial debt (short-term borrowings, CP)
+— Year 1 XBRL tag covers only scheduled LT debt
+  principal repayments
+
+Expected: Year1_XBRL ≤ Balance_Sheet_Current
+If Year1_XBRL > Balance_Sheet_Current:
+   Flag: "Year 1 maturity tag exceeds balance
+   sheet current portion — possible tagging
+   inconsistency; verify which figure is correct"
+   This is a genuine red flag — it should not occur
+   in a well-tagged filing
+```
+
+**Check 2 — WADM trend check**
+```
+Compute WADM for current period and prior two
+annual periods (from stored 10-K schedule history)
+
+If WADM declines for two consecutive annual periods:
+   Watch alert — maturity wall compressing
+If WADM declines for three consecutive annual periods:
+   Flag alert — sustained compression trend
+If WADM < 2.0 years:
+   Stress alert — very near-term maturity concentration
+   regardless of trend
+```
+
+**Check 3 — Near-term concentration sudden change**
+```
+Compare Year 1 maturity to prior quarter Year 1
+maturity (after adjusting for repayments):
+
+If Year 1 increases by > 20% quarter-over-quarter
+(not explained by a known new maturity entering
+the 12-month window):
+   Flag: "Year 1 maturity increased significantly —
+   verify whether new debt has been reclassified
+   to current or whether a debt event was missed"
+```
+
+**Check 4 — Thereafter bucket concentration**
+```
+If Thereafter / Total Debt > 60%:
+   No alert — well-laddered structure
+If Thereafter / Total Debt < 20% AND
+   WADM < 3.0 years:
+   Flag: "very little debt beyond year 5 —
+   entire debt stack concentrated in near-term;
+   refinancing risk elevated"
+```
+
+**Check 5 — Revolver maturity vs term debt maturity alignment**
+```
+If any term debt maturity occurs AFTER revolver
+maturity date:
+   Flag: "term debt matures after revolving credit
+   facility expiry — revolver renewal is a
+   prerequisite for refinancing term maturities;
+   elevated refinancing risk if revolver not renewed"
+```
+
+---
+
+### Audit Log Output Format (per company, per period)
+
+```
+{
+  "ticker": "RAD",
+  "period": "2023-03-04",
+  "filing": "10-K",
+  "schedule_anchor": "10-K 2023-03-04",
+  "patches_applied": [],
+
+  "formula_1": {
+    "current_lt_debt": {
+      "value": 166.5,
+      "tag": "us-gaap:LongTermDebtCurrent",
+      "path": "primary"
+    },
+    "short_term_borrowings": {
+      "value": 0,
+      "tag": "us-gaap:ShortTermBorrowings",
+      "path": "primary"
+    },
+    "near_term_maturity_total": 166.5,
+    "cash": 188.4,
+    "maturity_coverage_ratio_partial": 1.13,
+    "flags": ["revolver excluded — Phase 2"]
+  },
+
+  "formula_2": {
+    "xbrl_extraction": {
+      "year1": 166.5,
+      "year2": 500.0,
+      "year3": 800.0,
+      "year4": 0,
+      "year5": 1200.0,
+      "thereafter": 800.0,
+      "xbrl_sum": 3466.5,
+      "total_debt": 3450.0,
+      "reconciled": true,
+      "discrepancy_pct": 0.48
+    },
+    "llm_extraction": {
+      "year1": 166.5,
+      "year2": 500.0,
+      "year3": 800.0,
+      "year4": 0,
+      "year5": 1200.0,
+      "thereafter": 800.0,
+      "llm_sum": 3466.5,
+      "reconciled": true,
+      "confidence": "high",
+      "source": "Note 7 — Long-Term Debt,
+                 Maturities table"
+    },
+    "dual_path_agreement": true,
+    "final_schedule": {
+      "year1": 166.5,
+      "year2": 500.0,
+      "year3": 800.0,
+      "year4": 0,
+      "year5": 1200.0,
+      "thereafter": 800.0,
+      "source": "XBRL (verified by LLM)"
+    },
+    "derived": {
+      "wadm": 3.8,
+      "near_term_ratio": 0.193,
+      "concentration_max_year": "year5 — 34.7%",
+      "liquidity_to_maturity_coverage": 1.13
+    },
+    "revolver_maturity": {
+      "date": "2025-01-31",
+      "days_to_maturity": 333,
+      "flag": "revolving credit facility matures
+               within 12 months — Watch alert"
+    },
+    "covenant_flags": {
+      "cross_default_exists": true,
+      "covenant_breach_disclosed": false,
+      "waiver_obtained": false
+    }
+  },
+
+  "alerts": [
+    "WATCH — revolver matures within 12 months",
+    "WATCH — WADM 3.8 years; monitor for decline",
+    "FLAG — Year 5 concentration 34.7% exceeds 30% threshold"
+  ],
+
+  "warnings": [
+    "Year 4 maturity = 0 — verify no debt due in
+     fiscal year 4; confirm with LLM extraction"
+  ],
+
+  "nulls": []
+}
+```
+
