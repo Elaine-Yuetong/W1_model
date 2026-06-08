@@ -1375,3 +1375,186 @@ If issuer has multiple maintenance covenants:
 This Rite Aid example confirms that the covenant breach detection logic would have generated Critical alerts from the fiscal 2023 10-K — consistent with all prior metric validations and with the October 2023 bankruptcy outcome.
 
 
+## Stress Threshold — Covenant Headroom
+
+---
+
+### Structural Difference From Prior Metrics
+
+Covenant headroom thresholds differ from all prior metrics in two fundamental ways.
+
+**First difference — the threshold is issuer-specific and contract-defined.** For leverage, the stress threshold is 5.0x–6.0x depending on volatility category — a market convention applied uniformly. For covenant headroom, the threshold that matters most is the one written in the credit agreement. A company with 4% headroom to its contractual limit is in acute stress regardless of where that limit sits in absolute terms. The alert framework therefore operates on the percentage headroom relative to the contract, not on the absolute ratio level.
+
+**Second difference — the binary breach event supersedes all graduated thresholds.** Every prior metric uses graduated bands (Watch, Flag, Stress, Critical) based on how far a ratio has moved. Covenant headroom has those graduated bands for the pre-breach monitoring phase, but the moment of breach itself is a discrete legal event that bypasses all graduations. There is no "mild breach" — a breach is either occurring or it is not, and its occurrence triggers the maximum alert level regardless of how small the headroom violation is.
+
+---
+
+### Threshold Dimension 1 — Headroom Percentage (Primary Dimension)
+
+Source: S&P liquidity descriptor framework (covenant headroom below 15% as a negative qualitative factor) and Moody's guidance on covenant cushion in leveraged loan analysis. The percentage bands below reflect market practice for leveraged finance monitoring.
+
+**For all maintenance covenant types (leverage, coverage, liquidity, capex):**
+
+| Headroom Percentage | Interpretation | Alert Level |
+|---|---|---|
+| ≥ 30% | Ample — significant buffer against deterioration | No alert |
+| 20% – 30% | Adequate — comfortable but monitor trend | Watch |
+| 15% – 20% | Below adequate — S&P negative liquidity factor threshold | Watch — elevated |
+| 10% – 15% | Thin — one bad quarter could breach | Flag |
+| 5% – 10% | Very thin — imminent breach risk | Stress |
+| 0% – 5% | Near-breach — covenant likely to be breached next test | Critical |
+| < 0% | Breach — covenant already violated | Critical — immediate escalation |
+
+**EBITDA cushion supplementary thresholds (leverage covenant only):**
+
+| EBITDA Can Fall By | Interpretation | Alert Level |
+|---|---|---|
+| ≥ 25% | Robust cushion | No alert |
+| 15% – 25% | Adequate — manageable deterioration | Watch |
+| 10% – 15% | Thin — one meaningful revenue miss | Flag |
+| 5% – 10% | Very thin — any operational setback risks breach | Stress |
+| < 5% | Near-breach — essentially no EBITDA buffer | Critical |
+| Negative | Breach — current EBITDA already insufficient | Critical — immediate |
+
+---
+
+### Threshold Dimension 2 — Headroom Trend (Second Most Important Dimension)
+
+Consistent with the approach in leverage and FCF, the trend in headroom is often more informative than the absolute level. A company with 25% headroom that has declined from 45% over four quarters is more concerning than a company stable at 18%.
+
+| Headroom Trend | Alert Level |
+|---|---|
+| Headroom stable or increasing | No trend alert |
+| Headroom declining for 1 quarter | No alert — single data point |
+| Headroom declining for 2 consecutive quarters | Watch — compression trend beginning |
+| Headroom declining for 3 consecutive quarters | Flag — sustained compression regardless of absolute level |
+| Headroom declining for 4+ consecutive quarters | Stress — persistent deterioration |
+| Headroom declining AND absolute headroom < 15% | Escalate one level beyond trend-only alert |
+| Headroom declining AND step-down approaching | Escalate one additional level — dual compression risk |
+
+---
+
+### Threshold Dimension 3 — Step-Down Proximity
+
+Covenant step-downs are scheduled contractual tightenings of the threshold. They compress headroom automatically even if the company's financial performance is unchanged. The step-down proximity alert is unique to this metric.
+
+| Days to Next Step-Down AND Post-Step-Down Headroom | Interpretation | Alert Level |
+|---|---|---|
+| Step-down > 365 days away OR post-step-down headroom ≥ 20% | No near-term concern | No alert |
+| Step-down 180–365 days away AND post-step-down headroom 10%–20% | Approaching tightening | Watch |
+| Step-down 90–180 days away AND post-step-down headroom 5%–10% | Tightening imminent | Flag |
+| Step-down < 90 days away AND post-step-down headroom < 5% | Near-breach at step-down | Stress |
+| Post-step-down headroom < 0% at current ratio | Breach will occur at step-down at current performance | Critical — projected breach |
+
+**Important note:** A projected breach at step-down is not a current breach. The Critical alert for this scenario must be clearly labeled: "Projected covenant breach at step-down on [date] — breach has not yet occurred; [N] days until threshold tightens; current headroom [X]%." Do not label this the same as an actual breach.
+
+---
+
+### Threshold Dimension 4 — Addback Cap Utilisation (Formula 2 Only)
+
+The addback cap utilisation measures how dependent the company is on contractual EBITDA addbacks to maintain covenant compliance. A company at 90% of its addback cap has exhausted most of its buffer — future EBITDA deterioration will flow through fully to Covenant Leverage once the cap is reached.
+
+| Addback Cap Utilisation | Interpretation | Alert Level |
+|---|---|---|
+| < 50% | Addback capacity ample | No alert |
+| 50% – 70% | Moderate utilisation | Watch |
+| 70% – 85% | High utilisation — limited remaining buffer | Flag |
+| 85% – 100% | Near-binding — addback capacity nearly exhausted | Stress |
+| > 100% | Cap binding — addbacks being clipped; full EBITDA deterioration flowing through | Critical |
+| Cap binding AND headroom < 15% | Combined stress — no addback buffer remaining and thin headroom | Critical — escalate immediately |
+
+---
+
+### Threshold Dimension 5 — Covenant Type Severity Weighting
+
+Not all covenant breaches have the same consequence. The severity of a breach depends on which covenant is breached and what acceleration rights it triggers.
+
+| Covenant Type | Breach Consequence | Alert Weight |
+|---|---|---|
+| Leverage maintenance covenant (revolving credit) | Revolver unavailable for draws; lender may accelerate term debt | Highest — full credit facility at risk |
+| Coverage maintenance covenant (term loan) | Lender may accelerate term loan; cross-default possible | High — significant debt at risk |
+| Liquidity / minimum cash covenant | Same as coverage — lender may accelerate | High — may trigger cross-default |
+| Capex covenant | Limits future investment; lender may accelerate in some agreements | Medium — operational constraint + potential acceleration |
+| Incurrence covenant (high-yield bond) | Prohibits new debt issuance; does NOT trigger acceleration | Low — financial flexibility constraint only |
+| Springing covenant (currently inactive) | No current consequence; activates if trigger breached | Low currently — monitor trigger level |
+
+**System rule:** When a breach is detected, the alert level is always Critical. However the urgency description in the alert output must reflect the covenant type severity — a leverage maintenance covenant breach on a revolving credit facility is more operationally urgent than a capex covenant breach, and the analyst notification should reflect this.
+
+---
+
+### Threshold Dimension 6 — Multi-Covenant Stress
+
+When multiple maintenance covenants are simultaneously below threshold on headroom, the combined risk is greater than the sum of the individual risks — because a single underlying deterioration (falling EBITDA) simultaneously compresses all earnings-based covenants at once.
+
+| Multi-Covenant Condition | Alert Level |
+|---|---|
+| One covenant at Flag or above | Standard single-covenant alert |
+| Two covenants simultaneously at Flag or above | Escalate both to next level — "dual covenant stress" |
+| Three or more covenants simultaneously at Flag or above | Escalate all to Critical — "multi-covenant stress; entire credit facility at risk" |
+| Any covenant at Stress AND a second covenant at Watch | Flag both — deterioration affecting entire covenant package |
+
+---
+
+### Threshold Dimension 7 — Waiver and Amendment Signals
+
+Waivers and amendments are lagging confirmations of stress that has already occurred. Their presence in a filing is itself a threshold signal independent of the current headroom level.
+
+| Condition | Alert Level | Rationale |
+|---|---|---|
+| Covenant breach disclosed + waiver obtained | Critical — sustained | Breach confirmed; waiver temporary; underlying stress persists |
+| Covenant breach disclosed + no waiver | Critical — acute | Breach with no resolution; lenders may accelerate immediately |
+| Amendment relaxing covenant threshold | Stress | Lenders conceded terms — confirms financial trajectory worse than originally expected |
+| Amendment tightening covenant threshold | Watch — monitor | Company accepted tighter terms — may signal improved position or may reflect lender-imposed discipline |
+| Waiver expiry within 90 days without permanent amendment | Critical — cliff approaching | Temporary waiver expiring; breach will recur unless performance improves or permanent amendment obtained |
+| Second waiver obtained for same covenant within 12 months | Critical | Repeat waiver signals structural not temporary deterioration |
+| Equity cure exercised | Stress | Company injected equity to cure breach — breach occurred; equity cure is a one-time remedy with limits |
+
+---
+
+### Combined Alert Trigger Rules
+
+The most severe alert across all seven dimensions governs the overall covenant headroom alert level.
+
+| Alert Level | Any of These Conditions | Action |
+|---|---|---|
+| **Watch** | Headroom 20%–30%; OR headroom declining 2 consecutive quarters; OR step-down 180–365 days away with post-step-down headroom 10%–20%; OR addback cap 50%–70% utilised | Log; weekly review |
+| **Flag** | Headroom 10%–15%; OR headroom declining 3 consecutive quarters; OR EBITDA cushion 10%–15%; OR step-down 90–180 days with post-step-down headroom 5%–10%; OR addback cap 70%–85% utilised; OR covenant amendment relaxing terms | Generate alert; daily monitoring |
+| **Stress** | Headroom 5%–10%; OR headroom declining 4+ quarters; OR EBITDA cushion 5%–10%; OR step-down < 90 days with post-step-down headroom < 5%; OR addback cap 85%–100% utilised; OR waiver obtained; OR equity cure exercised; OR two covenants simultaneously at Flag | Immediate alert; escalate same day |
+| **Critical** | Headroom 0%–5%; OR any covenant breach disclosed; OR waiver expiry within 90 days; OR repeat waiver within 12 months; OR EBITDA cushion < 5%; OR addback cap binding with headroom < 15%; OR three or more covenants at Flag or above; OR projected breach at upcoming step-down | Immediate escalation; cross-reference all metrics |
+| **Critical — Immediate** | Headroom < 0% (breach confirmed); OR breach disclosed without waiver; OR going concern language in any filing | Highest urgency; same-day analyst notification; no further computation required |
+| **Trend Flag** | Headroom declining any three consecutive quarters regardless of absolute level | Alert regardless of band |
+| **Extraction Failure** | Threshold null after all fallbacks in Phase 3 | Apply Phase 2 proxy; label prominently as proxy; escalate to manual review |
+
+---
+
+### Sector Exceptions and Adjustments
+
+**Investment-grade issuers:** Many investment-grade revolving credit facilities contain maintenance covenants but with very wide thresholds — leverage covenants of 3.5x–4.5x for companies currently at 1.0x–2.0x leverage provide so much headroom that they function as a distant backstop rather than a real constraint. For investment-grade issuers confirmed to have leverage below 2.5x, the covenant headroom metric is largely informational in Phase 3 — monitor but apply a one-level downward adjustment to all alerts given the structural distance from any threshold.
+
+**Covenant-lite leveraged issuers:** As flagged in the extraction logic, covenant-lite facilities have no maintenance covenants. For these issuers the metric produces no headroom computation and no graduated alerts. The only signal available is the incurrence covenant test — whether the company can issue additional debt. Flag covenant-lite status on every output: "covenant-lite facility — no financial maintenance covenant acceleration risk; incurrence covenant capacity monitored only."
+
+**Asset-based lending (ABL) facilities:** ABL facilities use a borrowing base (eligible receivables and inventory) rather than financial ratio covenants. The primary constraint is the availability under the borrowing base — not a leverage or coverage ratio. For ABL borrowers, the relevant threshold is the availability block (minimum availability required) and the springing covenant trigger. These are already covered under the minimum liquidity covenant framework but should be clearly labeled as ABL-specific: "ABL facility — borrowing base availability is the primary covenant constraint; financial ratio covenants secondary or absent."
+
+**Financial institutions:** Same exception as all prior metrics — not applicable.
+
+---
+
+### Empirical Context and Backtest Anchor
+
+**Historical reference — Rite Aid:**
+As confirmed in the audit log example in Extraction Fallback Logic: Rite Aid's fiscal 2023 10-K disclosed breaches of both its leverage covenant (threshold 5.50x, actual 10.2x) and its coverage covenant (threshold 1.75x minimum, actual −0.69x). Both breaches were accompanied by waivers expiring June 2023. Under the threshold framework, both would generate Critical — Immediate alerts from the breach disclosure alone, with the waiver expiry creating a secondary Critical cliff event. This is fully consistent with the October 2023 bankruptcy — the waiver was not permanently resolved, the underlying deterioration continued, and the company filed for Chapter 11 approximately four months after the waiver expiry. The covenant headroom metric would have generated its first Critical alerts in fiscal 2023 — confirming the pattern established across all prior metrics.
+
+**Historical reference — general empirical evidence:**
+Moody's research on leveraged loan defaults confirms that companies that obtain covenant waivers default at rates approximately 30–40% higher within the following 12 months than companies that maintain covenant compliance. This directly validates the Stress-level alert for waiver disclosure and the Critical-level alert for repeat waivers. The 15% headroom threshold for S&P's liquidity descriptor negative factor is published in S&P's Corporate Methodology and is the most directly sourced of all the thresholds in this metric.
+
+**Phase 3 backtest validation targets:**
+
+| Metric | Target |
+|---|---|
+| Breach detection precision | 100% of disclosed covenant breaches generate Critical alert — zero tolerance for missed breach signals; keyword detection is the mechanism |
+| Waiver predictive value | ≥ 70% of issuers obtaining covenant waivers should experience a credit event (default, distressed exchange, or bankruptcy) within 18 months |
+| Headroom compression catch rate | ≥ 75% of eventual defaulters should show covenant headroom below 15% at least two quarters before the credit event |
+| Step-down projection accuracy | ≥ 80% of projected step-down breaches (headroom < 0% post-step-down) should either be resolved by amendment or confirmed as actual breaches within two quarters |
+| False positive rate | ≤ 20% of issuers flagged at Stress or above on headroom should remain in compliance without a credit event for more than four quarters — reflecting the urgency of thin headroom signals |
+
+
