@@ -719,6 +719,7 @@ Step 5 — If credit agreement is not publicly filed:
 | **Current Coverage Ratio** | F1, F2, F3 | Derived from Coverage Formula 1 (already extracted) | Structured — reused from prior metric | EBITDA / Interest Expense computed deterministically. Pull from stored Coverage metric output. Same null propagation rule as leverage ratio. |
 | **Current Cash / Available Liquidity** | F1, F2, F3 | Derived from Liquidity Formula 1 (already extracted) | Structured — reused from prior metric | Cash and available liquidity already extracted. Pull from stored Liquidity metric output. For liquidity covenant headroom only. |
 | **Current Capex** | F1 (capex covenant only) | Cash Flow Statement — Investing Activities | Structured — XBRL tagged | `us-gaap:PaymentsToAcquirePropertyPlantAndEquipment` — already extracted for FCF metric. Reuse stored value. |
+| **Covenant Compliance Text** | F1, F2, F3 | XBRL — DebtInstrumentCovenantCompliance | **Semi-structured — XBRL tag exists; content is free text requiring keyword analysis** | Tag exists in US GAAP taxonomy. Returns a text string, not a binary flag. Filer adoption inconsistent. When populated: keyword scan for breach/compliance. When null: fall back to LLM Debt Footnote extraction. Never treat null as compliance. |
 | **Maximum Leverage Covenant Threshold** | F1, F2, F3 | Debt Footnote — covenant compliance section | **Unstructured — LLM required** | No XBRL tag exists. LLM reads Debt Footnote covenant section. Extracts numeric threshold (e.g. 5.5x) and exact covenant name as stated in filing. If not found in Debt Footnote: escalate to Credit Agreement Exhibit 10.x. If neither source yields threshold: headroom = null; flag: "leverage covenant threshold not extracted — headroom computation not possible." |
 | **Minimum Coverage Covenant Threshold** | F1, F2, F3 | Debt Footnote — covenant compliance section | **Unstructured — LLM required** | Same extraction approach as leverage threshold. LLM must also identify whether this is a maintenance covenant (tested every period — relevant for headroom) or an incurrence covenant (tested only on action — flag as non-maintenance; not a default trigger). |
 | **Minimum Liquidity Covenant Threshold** | F1, F2, F3 | Debt Footnote — covenant compliance section | **Unstructured — LLM required** | Dollar amount not a ratio. LLM extracts minimum cash balance or minimum revolver availability required. Must also identify whether springing covenant — if so, extract trigger level as well as threshold. Flag springing covenant existence even if currently inactive. |
@@ -791,6 +792,21 @@ Same four universal rules apply, plus five additional rules specific to Covenant
 
 ---
 
+### Detection Priority Table (Updated)
+
+The original design had keyword scanning of the Debt Footnote as the first breach detection step. With this tag added, the updated detection priority is:
+
+| Priority | Method | Speed | Reliability | Phase |
+|---|---|---|---|---|
+| 1 | `DebtInstrumentCovenantCompliance` XBRL tag keyword scan | Fastest — API query + keyword match | Moderate — only works if filer populates tag | Phase 2 |
+| 2 | 8-K Item 1.01 keyword scan (waiver / amendment) | Fast — within 4 business days of event | High — companies file 8-K when seeking waiver | Phase 2 |
+| 3 | LLM keyword scan of Debt Footnote | Medium — requires LLM call per filing | Highest — directly reads disclosure text | Phase 3 |
+| 4 | LLM keyword scan of MD&A | Medium | High | Phase 3 |
+| 5 | LLM keyword scan of Auditor's Report | Medium | High — auditor language is precise | Phase 3 |
+| 6 | Ratio-based breach inference (ratio > covenant threshold) | Same as quarterly filing lag | Moderate — requires threshold already extracted | Phase 3 |
+
+---
+
 ### Pre-Extraction Step — Covenant Existence Check
 
 Before attempting any threshold extraction, the system must first establish whether financial maintenance covenants exist for this issuer. Not all debt carries maintenance covenants.
@@ -831,6 +847,97 @@ Wall extraction):
       but lenders have less protection
 ```
 
+---
+
+
+### Input 0 — Covenant Compliance XBRL Tag
+
+```
+Input 0 — Covenant Compliance XBRL Tag
+(runs before all other covenant extraction)
+
+Step 0A — Query EDGAR companyconcept API:
+   https://data.sec.gov/api/xbrl/companyconcept/
+   CIK{number}/us-gaap/
+   DebtInstrumentCovenantCompliance.json
+
+   Select the entry matching current filing
+   period end date.
+   Extract the string value.
+
+Step 0B — If tag returns a non-null string:
+   Apply keyword scan to the string value:
+
+   Breach keywords (trigger Critical alert):
+   "not in compliance"
+   "covenant violation"
+   "event of default"
+   "failed to comply"
+   "breach"
+   "waiver"
+   "forbearance"
+
+   Compliance keywords (positive signal):
+   "in compliance with all"
+   "in compliance with each"
+   "satisfied all"
+   "met all financial covenant"
+
+   Ambiguous / needs LLM:
+   Any string longer than 200 characters
+   Any string not matching either keyword set
+   Any string containing "however," "except,"
+   "subject to," "notwithstanding" — these
+   hedging terms may qualify a compliance
+   statement with undisclosed exceptions
+
+Step 0C — Classify result:
+
+   If breach keyword found:
+      IMMEDIATE CRITICAL ALERT
+      Flag: "covenant breach language detected
+      in DebtInstrumentCovenantCompliance
+      XBRL tag — [keyword found]; LLM extraction
+      required to confirm and detail"
+      Escalate to full LLM extraction (Input 1
+      in prior fallback logic) for detail
+      Do NOT stop at tag value alone — get full
+      footnote context
+
+   If compliance keyword found AND string
+   is short and unambiguous (< 100 chars):
+      Store as: "compliance_confirmed_xbrl = true"
+      Source: "us-gaap:DebtInstrumentCovenantCompliance"
+      Still proceed to LLM extraction for
+      threshold and headroom computation
+      Tag this as a fast compliance signal
+      not a substitute for full extraction
+
+   If ambiguous or long string:
+      Pass full string to LLM for interpretation
+      LLM determines: compliant / breach /
+      waiver / ambiguous
+      Log: "XBRL covenant tag value passed to LLM
+      for interpretation — string length [N] chars"
+
+Step 0D — If tag returns null:
+   Log: "DebtInstrumentCovenantCompliance tag
+   absent — filer did not populate; proceeding
+   to LLM Debt Footnote extraction"
+   Do NOT treat null as compliance confirmation
+   Proceed to Input 1 (Debt Footnote LLM)
+   without generating any alert from this step
+
+Step 0E — Coverage across portfolio:
+   Track which issuers in the 30-name portfolio
+   populate this tag and which do not.
+   At Phase 2 onboarding: check each issuer's
+   most recent 10-K for tag presence.
+   Issuers that populate it: activate XBRL
+   pre-screening at each quarterly filing.
+   Issuers that do not: skip Step 0A-0C;
+   go directly to Phase 2 proxy or Phase 3 LLM.
+```
 ---
 
 ### Input 1 — Covenant Thresholds (All Types)
@@ -1278,6 +1385,17 @@ If issuer has multiple maintenance covenants:
     "maintenance_covenants_present": true,
     "covenant_lite": false,
     "source": "Debt Footnote — Note 7"
+  },
+
+  "covenant_compliance_xbrl": {
+    "tag": "us-gaap:DebtInstrumentCovenantCompliance",
+    "populated": true/false,
+    "raw_value": "[string if populated, null if not]",
+    "keyword_scan_result": "compliant/breach/waiver/ambiguous/null",
+    "breach_keyword_found": true/false,
+    "compliance_keyword_found": true/false,
+    "passed_to_llm": true/false,
+    "llm_interpretation": "[if passed to LLM]"
   },
 
   "covenants": [
