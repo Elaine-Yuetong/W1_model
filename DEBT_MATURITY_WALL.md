@@ -1310,3 +1310,415 @@ maturity date:
 }
 ```
 
+## Stress Threshold — Debt Maturity Wall
+
+---
+
+### Structural Difference From Prior Metrics
+
+All prior metrics produce ratios that can be compared to published threshold tables or market convention bands. The Debt Maturity Wall is fundamentally different in three ways that require a different threshold framework.
+
+**First difference — no single universal threshold table exists.** S&P and Moody's assess maturity profiles as part of their liquidity descriptor and SGL rating frameworks rather than as standalone ratio thresholds. There is no equivalent of Tables 4.7–4.9 for maturity concentration. The thresholds below are derived from rating agency methodology commentary, leveraged finance market convention, and empirical default research rather than a single published table.
+
+**Second difference — the metric has multiple outputs requiring separate thresholds.** Unlike leverage which produces one ratio, the maturity wall produces a schedule, four derived ratios, and several binary flags. Each requires its own threshold logic. The combined alert level is determined by the most severe signal across all outputs.
+
+**Third difference — time is the primary variable.** The same maturity amount is more or less alarming depending on how far away it is. Threshold logic must incorporate the time dimension — not just the size of the maturity but the number of days until it arrives.
+
+---
+
+### Threshold Dimension 1 — Near-Term Maturity Coverage Ratio (Formula 1)
+
+This is the only maturity wall output computable in Phase 2. It measures whether available cash covers debt due within 12 months.
+
+Source: Moody's SGL framework and S&P liquidity descriptor methodology — both treat near-term maturity coverage as a primary quantitative input to liquidity assessment.
+
+| Near-Term Maturity Coverage (cash only — Phase 2) | Interpretation | Alert Level |
+|---|---|---|
+| ≥ 3.0x | Cash covers near-term maturities three times over | No alert |
+| 2.0x – 3.0x | Comfortable cash coverage | No alert — monitor trend |
+| 1.5x – 2.0x | Adequate — limited buffer | Watch |
+| 1.0x – 1.5x | Thin — cash barely covers near-term debt | Flag |
+| 0.5x – 1.0x | Insufficient — cash cannot cover near-term debt | Stress |
+| < 0.5x | Severely insufficient | Critical |
+
+| Near-Term Maturity Coverage (cash + revolver — Phase 3) | Interpretation | Alert Level |
+|---|---|---|
+| ≥ 2.0x | Strong liquidity relative to near-term obligations | No alert |
+| 1.5x – 2.0x | Adequate | Watch |
+| 1.2x – 1.5x | Below adequate | Flag |
+| 1.0x – 1.2x | Thin — total liquidity barely covers maturities | Stress |
+| < 1.0x | Total liquidity insufficient to cover near-term debt | Critical |
+
+**Phase 2 flag on all outputs:** All near-term maturity coverage alerts generated in Phase 2 must note: "alert based on cash only — revolver excluded; actual coverage may be higher; verify revolver availability before escalating." Do not suppress the alert but note the limitation on every output.
+
+---
+
+### Threshold Dimension 2 — Days to Nearest Maturity (Formula 3, Phase 3)
+
+Source: Leveraged finance market convention. The number of days before a maturity is not actionable alone — it must be combined with the company's refinancing capacity. The thresholds below reflect the typical window within which companies must complete a refinancing to avoid a distressed situation.
+
+| Days to Nearest Material Maturity | Interpretation | Alert Level |
+|---|---|---|
+| > 730 days (> 2 years) | Ample time for proactive refinancing | No alert |
+| 548 – 730 days (18–24 months) | Refinancing planning should begin | Watch |
+| 365 – 548 days (12–18 months) | Refinancing window narrowing — execution required | Flag |
+| 180 – 365 days (6–12 months) | Refinancing must be underway or completed | Stress |
+| 90 – 180 days (3–6 months) | Imminent — refinancing or repayment must be confirmed | Critical |
+| < 90 days | Near-default unless refinancing or cash repayment confirmed | Critical — highest urgency |
+
+**Materiality threshold:** Apply these thresholds only when the maturing tranche exceeds the lower of: (a) $50M, or (b) 5% of total debt. Small maturities below this threshold do not trigger the days-to-maturity alert regardless of proximity.
+
+**Combination rule:** Days to nearest maturity alerts are escalated one level when combined with a Stress or Critical alert on leverage or coverage. A company with a 270-day maturity (Stress level) that is also in the Highly Leveraged band on leverage should be treated as Critical — its ability to refinance is compromised by its credit quality.
+
+---
+
+### Threshold Dimension 3 — Maturity Concentration Ratio (Formula 2)
+
+Source: Empirical default research. Studies of leveraged loan and high-yield bond defaults consistently identify concentration of maturities as an independent predictor of refinancing failure. Moody's guidance notes that a maturity wall concentrated in a single year is a negative factor in liquidity assessment regardless of the absolute amount.
+
+| Single-Year Concentration (any year in Years 1–5) | Interpretation | Alert Level |
+|---|---|---|
+| < 20% of total debt | Well-distributed — no concentration concern | No alert |
+| 20% – 30% | Moderate concentration — monitor | Watch |
+| 30% – 40% | Elevated concentration | Flag |
+| 40% – 50% | High concentration — refinancing event risk | Stress |
+| > 50% | Severe concentration — single-year refinancing risk | Critical |
+
+**Year proximity adjustment:** Apply the following multiplier to concentration thresholds based on which year the concentration falls in. The same concentration is more alarming in Year 1 than in Year 5.
+
+| Year of Concentration | Threshold Adjustment | Effect |
+|---|---|---|
+| Year 1 | Reduce all thresholds by 10 percentage points | 20% → Flag; 30% → Stress; 40% → Critical |
+| Year 2 | Reduce all thresholds by 5 percentage points | 25% → Flag; 35% → Stress; 45% → Critical |
+| Year 3 | Standard thresholds apply | As per table above |
+| Year 4 | Increase all thresholds by 5 percentage points | 35% → Flag; 45% → Stress; 55% → Critical |
+| Year 5 | Increase all thresholds by 10 percentage points | 40% → Flag; 50% → Stress; 60% → Critical |
+
+**Rationale:** A 35% concentration in Year 1 is a near-term crisis. The same concentration in Year 5 is a future planning item. Adjusting thresholds by proximity reflects this reality without requiring separate tables for each year.
+
+---
+
+### Threshold Dimension 4 — Near-Term Ratio (Formula 2)
+
+Source: S&P liquidity descriptor methodology — the Year 1 plus Year 2 maturity relative to total debt is a direct input to the sources-and-uses assessment.
+
+| Near-Term Ratio (Year 1 + Year 2 / Total Debt) | Interpretation | Alert Level |
+|---|---|---|
+| < 15% | Low near-term refinancing burden | No alert |
+| 15% – 25% | Moderate — manageable with normal market access | Watch |
+| 25% – 40% | Elevated — meaningful refinancing requirement | Flag |
+| 40% – 55% | High — significant near-term wall | Stress |
+| > 55% | Severe — majority of debt stack matures within 2 years | Critical |
+
+---
+
+### Threshold Dimension 5 — Weighted Average Debt Maturity (Formula 2)
+
+Source: Moody's and S&P both reference average debt maturity in liquidity commentary. No single published table — the ranges below reflect investment-grade and high-yield market norms.
+
+| WADM | Interpretation | Alert Level |
+|---|---|---|
+| ≥ 7 years | Long-dated — minimal refinancing pressure | No alert |
+| 5 – 7 years | Adequate — normal investment-grade range | No alert |
+| 4 – 5 years | Below average — moderate refinancing pressure | Watch |
+| 3 – 4 years | Short — elevated refinancing pressure | Flag |
+| 2 – 3 years | Very short — significant near-term wall building | Stress |
+| < 2 years | Critically short | Critical |
+
+**WADM trend rule — more important than absolute level:**
+
+| WADM Trend | Alert Level |
+|---|---|
+| WADM stable or increasing | No trend alert |
+| WADM declining for 1 year | No alert — single data point |
+| WADM declining for 2 consecutive annual periods | Watch — compression trend beginning |
+| WADM declining for 3 consecutive annual periods | Flag — sustained compression |
+| WADM declining for 4+ consecutive annual periods | Stress — persistent structural deterioration |
+| WADM declining AND absolute WADM < 3 years | Escalate one level beyond trend-only alert |
+
+---
+
+### Threshold Dimension 6 — Revolving Credit Facility Maturity
+
+Source: S&P liquidity descriptor framework — revolver maturity within 12 months is an explicit negative qualitative factor that reduces the liquidity descriptor regardless of other metrics.
+
+| Days to Revolver Maturity | Interpretation | Alert Level |
+|---|---|---|
+| > 548 days (18+ months) | No near-term concern | No alert |
+| 365 – 548 days (12–18 months) | Renewal planning required | Watch |
+| 180 – 365 days (6–12 months) | Renewal must be in progress | Flag |
+| < 180 days (< 6 months) | Renewal urgently required — liquidity at risk | Stress |
+| < 90 days (< 3 months) without confirmed renewal | Primary liquidity backstop effectively gone | Critical |
+
+**Interaction with coverage ratio:** If the revolver is maturing within 12 months AND it currently has drawn amounts outstanding: escalate the revolver maturity alert one level. A maturing revolver with outstanding borrowings requires both renewal of the facility AND refinancing of the drawn amount — a compounded liquidity requirement.
+
+---
+
+### Threshold Dimension 7 — Covenant Acceleration Flags (Binary)
+
+These are binary triggers — either the condition is present or it is not. No graduated threshold applies.
+
+| Condition | Alert Level | Action |
+|---|---|---|
+| Covenant breach disclosed | CRITICAL — immediate | Override all maturity schedule alerts; escalate regardless of schedule; cross-reference Covenant Headroom metric |
+| Waiver obtained for disclosed breach | Stress — sustained | Breach occurred; waiver is temporary; underlying deterioration persists; monitor for breach recurrence |
+| Cross-default provisions present AND leverage in Aggressive or Highly Leveraged band | Flag — elevated risk | Cross-default provisions make a potential covenant breach more systemic; flag the combination |
+| Change of control provision present AND M&A activity rumoured or announced | Flag | Change of control event would make debt immediately due; monitor alongside news and 8-K filings |
+
+---
+
+### Threshold Dimension 8 — Interest Rate Reset Impact (Formula 3, Phase 3)
+
+Source: Coverage metric thresholds — the interest rate reset is measured by its impact on the coverage ratio.
+
+| Projected Coverage Compression from Reset | Interpretation | Alert Level |
+|---|---|---|
+| < 0.25x compression | Minimal reset impact | No alert |
+| 0.25x – 0.5x compression | Moderate — coverage will tighten | Watch |
+| 0.5x – 1.0x compression | Material — coverage meaningfully reduced | Flag |
+| > 1.0x compression | Severe — reset materially impairs coverage | Stress |
+| Reset causes coverage to cross a threshold band | Automatic escalation | Escalate to level implied by post-reset coverage band |
+
+---
+
+### Combined Alert Trigger Rules
+
+The most severe alert across all eight dimensions governs the overall maturity wall alert level, subject to the combination rules below.
+
+| Alert Level | Any of These Conditions | Action |
+|---|---|---|
+| **Watch** | Near-term coverage 1.5x–2.0x (Phase 2); OR concentration 20%–30% in Year 3–5; OR near-term ratio 15%–25%; OR WADM 4–5 years or declining 2 consecutive years; OR revolver maturity 365–548 days | Log; weekly review |
+| **Flag** | Near-term coverage 1.0x–1.5x (Phase 2); OR concentration 30%–40% (adjusted by year proximity); OR near-term ratio 25%–40%; OR WADM 3–4 years or declining 3 consecutive years; OR revolver maturity 180–365 days; OR cross-default present + leverage stressed | Generate alert; daily monitoring |
+| **Stress** | Near-term coverage 0.5x–1.0x (Phase 2); OR concentration 40%–50% (adjusted); OR near-term ratio 40%–55%; OR WADM 2–3 years or declining 4+ years; OR revolver maturity < 180 days; OR waiver obtained for disclosed breach; OR coverage compression > 1.0x from rate reset | Immediate alert; escalate same day |
+| **Critical** | Near-term coverage < 0.5x; OR concentration > 50% (adjusted); OR near-term ratio > 55%; OR WADM < 2 years; OR revolver maturity < 90 days without renewal; OR covenant breach disclosed; OR days to nearest material maturity < 90 | Immediate escalation; cross-reference all metrics |
+| **Trend Flag** | WADM declining consecutively regardless of absolute level; OR near-term ratio increasing for 3 consecutive quarters | Alert regardless of band |
+| **Extraction Failure** | Schedule null after all fallbacks | Revert to Formula 1 only; escalate to manual review |
+
+---
+
+### Sector Exceptions and Adjustments
+
+**Financial institutions:** Not applicable — same exception as all prior metrics. Banks and insurance companies manage maturity profiles under regulatory frameworks that render these thresholds meaningless.
+
+**Utilities and regulated infrastructure:** These sectors routinely carry higher maturity concentration because their stable, regulated cash flows and strong credit quality enable reliable access to capital markets at any point in the cycle. Apply a 10 percentage point upward adjustment to all concentration thresholds for confirmed utility issuers.
+
+**Investment-grade issuers with strong capital markets access:** For issuers rated BBB− or above with confirmed strong capital markets access (from S&P Strong or Exceptional liquidity descriptor), the near-term ratio and concentration thresholds can be relaxed by one alert level — an investment-grade issuer with 45% of debt maturing in Year 2 has materially lower effective refinancing risk than a high-yield issuer with the same profile. This adjustment requires Phase 3 LLM extraction of the S&P liquidity descriptor or rating confirmation — it is not applicable in Phase 2.
+
+**Companies in active liability management:** Some companies deliberately run down their maturity wall through tender offers, open market repurchases, and exchange offers. A declining WADM accompanied by active liability management (visible in 424B and 8-K Item 2.03 filings showing new long-dated issuances and tender offer filings) should be assessed differently from a passive decline. Flag the trend but note the context: "WADM declining — consistent with active liability management programme; verify new issuance tenor is extending rather than compressing the wall."
+
+---
+
+### Empirical Context and Backtest Anchor
+
+**Historical reference — Rite Aid:**
+From the audit log validated earlier: Rite Aid's revolver matured January 31, 2025 — at the time of the fiscal 2023 10-K filing (filed May 1, 2023), the revolver maturity was 639 days away — Watch level on Dimension 6. However the revolver was already under stress because FCF was negative and leverage was above 10x, making renewal uncertain. This combination — revolver maturity in the Watch band combined with Stress or Critical signals on leverage, coverage, and FCF — illustrates why the combination rules escalating maturity alerts by one level when leverage is stressed are operationally important.
+
+**Historical reference — iHeartMedia:**
+iHeartMedia's maturity wall was a defining feature of its distress trajectory. As validated in the Leverage section, the company accumulated over $20B of debt through its leveraged buyout. The maturity concentration in 2019 (multiple large tranches maturing simultaneously) combined with leverage above 10x and negative FCF made refinancing impossible on acceptable terms. A system monitoring WADM and near-term concentration would have flagged the 2016–2017 filings as Stress on multiple dimensions — approximately 18–24 months before the March 2018 bankruptcy filing.
+
+**Phase 3 backtest validation targets:**
+
+| Metric | Target |
+|---|---|
+| Catch rate (any dimension at Flag or above) | ≥ 80% of known distressed cases flagged at Flag or above at least two quarters before credit event |
+| Days-to-maturity precision | ≥ 85% of Critical days-to-maturity alerts (< 90 days) followed by a refinancing event, repayment, or credit event within the flagged period |
+| WADM trend catch rate | ≥ 70% of distressed cases show declining WADM for ≥ 2 consecutive years before credit event |
+| False positive rate | ≤ 25% of investment-grade issuers falsely flagged at Stress or above — reflecting the sector adjustment for strong capital markets access |
+| Covenant breach precision | 100% of covenant breach disclosures should trigger Critical alert — zero tolerance for missed covenant breach signals |
+
+
+## Signal Timing — Debt Maturity Wall
+
+---
+
+### Classification
+
+**Structurally unique — the only metric in this spec that combines a leading indicator function with a fixed-date cliff event.**
+
+Every other metric in this spec signals stress through deteriorating ratios — the signal is about direction and trend. The debt maturity wall is fundamentally different because it contains a calendar-driven component that is completely independent of business performance. A debt maturity date does not move based on how well or poorly the company is doing. It is fixed at issuance and approaches at one day per day regardless of EBITDA, FCF, or covenant compliance. This creates a timing dynamic unlike any other metric: the signal can be known years in advance with complete certainty, but its severity increases non-linearly as the date approaches.
+
+This dual nature — early visibility combined with accelerating urgency — means the maturity wall serves two distinct functions in your system simultaneously. At long horizons (Years 3–5) it is a planning and monitoring signal that complements FCF and leverage trend analysis. At short horizons (within 12 months) it becomes the most time-critical signal in the entire spec — more urgent than any ratio-based metric because the clock is fixed and cannot be slowed by operational improvement.
+
+---
+
+### The Three Temporal Zones
+
+The maturity wall signal operates across three distinct temporal zones, each requiring a different system response:
+
+**Zone 1 — Strategic horizon (18 months to 5 years)**
+
+In this zone the maturity is a known future event but its refinancing risk is highly uncertain. Capital market conditions 3 years from now are unknowable. The company's credit quality at that time depends on its operational trajectory between now and then. The maturity wall signal in Zone 1 is primarily structural — it identifies concentration risk and WADM compression as design flaws in the company's debt structure that create future vulnerability. The appropriate system response is monitoring and trend tracking, not escalation.
+
+The most important Zone 1 signal is WADM compression across consecutive annual filings. A company whose WADM was 5.2 years in 2021, 4.4 years in 2022, and 3.6 years in 2023 is not refinancing at longer tenors than it is retiring — its debt structure is becoming more fragile each year. This is visible 3–5 years before the wall arrives and is detectable only through the annual 10-K maturity schedule extractions.
+
+**Zone 2 — Tactical horizon (6 to 18 months)**
+
+In this zone the maturity is approaching and refinancing activity must be observable. Capital markets access is now testable — the company either can or cannot execute a refinancing at acceptable terms. Absence of refinancing activity in this zone is itself a signal: a company that has not begun addressing a maturity 12 months away is either relying on available cash (check liquidity metric), relying on future FCF (check FCF metric), or struggling to find willing lenders (the most alarming interpretation).
+
+Your system detects Zone 2 refinancing activity through 424B filings (new public bond issuances) and 8-K Item 2.03 filings (new credit facilities). A new long-dated bond issuance accompanied by a tender offer for the maturing bonds is the clearest positive resolution signal. Absence of these filings as a maturity enters Zone 2 is a Watch-to-Flag escalation trigger.
+
+**Zone 3 — Crisis horizon (0 to 6 months)**
+
+In this zone the maturity is imminent and every day without a confirmed refinancing or repayment plan increases default probability. The company's options are narrowing — each passing week reduces the time available to complete a transaction, negotiate terms, and close a new facility. In Zone 3 the maturity wall signal dominates all other metrics in urgency. A company that is modestly stressed on leverage and coverage but has a $1B maturity due in 45 days with no announced refinancing is facing a potential default regardless of its operating performance.
+
+Your system's primary Zone 3 monitoring tool is daily 8-K surveillance for issuers in this zone — specifically looking for 424B bond pricing announcements, 8-K Item 1.01 credit facility signings, and 8-K Item 8.01 announcements confirming refinancing completion. These filings provide resolution confirmation within hours of execution.
+
+---
+
+### Three-Tier Timing Structure
+
+| Tier | Source | Data Quality | Lag After Quarter-End | Lead Before 10-Q | Use in System |
+|---|---|---|---|---|---|
+| **Tier 1 — Annual schedule update** | 10-K | Audited; XBRL + LLM extraction; Formula 2 full schedule | **+60 days** after fiscal year-end (large accelerated filer) | n/a | Full maturity schedule refresh; WADM computed; all eight threshold dimensions updated |
+| **Tier 1b — Quarterly balance sheet update** | 10-Q | Reviewed; structured XBRL only; Formula 1 near-term maturity | **+40 days** after quarter-end | n/a | Near-term maturity coverage ratio updated quarterly; full schedule not refreshed unless XBRL maturity tags updated |
+| **Tier 2 — Intra-year debt event** | 8-K Item 2.03 / 424B / Item 1.01 | Event disclosure; LLM extraction; patches rolling schedule | **Within 4 business days** (Item 2.03) or same day (424B) | Any time intra-year | Rolling schedule patch; new maturities added; refinancing completions noted |
+| **Tier 3 — Earnings press release** | 8-K Item 2.02 | Preliminary; company may disclose refinancing status | **+14 to +25 days** after quarter-end | **−15 to −25 days before 10-Q** | Refinancing status commentary; Phase 3 only |
+
+**Critical difference from prior metrics:** The maturity wall has a Tier 1b (quarterly balance sheet update) that is separate from the Tier 1 annual schedule update. The full maturity schedule refreshes only annually from the 10-K. The near-term maturity coverage ratio (Formula 1) updates quarterly from the balance sheet current portion. This asymmetry means the system has two update frequencies running simultaneously for the same metric — quarterly for the near-term signal and annually for the full wall picture.
+
+---
+
+### The Lead Time Advantage — Longest of All Metrics
+
+The debt maturity wall is the only metric in this spec where the system knows about a stress event years before it occurs. A bond issued in 2020 with a 2026 maturity date creates a maturity wall entry in 2020 that is visible in every filing from issuance to maturity. Compare this to leverage, which can only signal deterioration after it has already occurred in the filed numbers.
+
+**Quantitative lead time comparison:**
+
+| Metric | Typical Lead Time Before Credit Event | Basis |
+|---|---|---|
+| Free Cash Flow (compression trend) | 4–6 quarters | Empirical — cash deterioration precedes earnings deterioration |
+| Interest Coverage (declining trend) | 2–4 quarters | Empirical — earnings deterioration precedes balance sheet stress |
+| Leverage (rising trend) | 2–4 quarters | Empirical — debt accumulation visible in filed ratios |
+| Liquidity (ratio deterioration) | 1–2 quarters | Coincident to lagging — absorbs stress until cliff |
+| **Debt Maturity Wall (Zone 1 detection)** | **8–20 quarters (2–5 years)** | **Structural — maturity date is known from issuance** |
+| Debt Maturity Wall (Zone 3 crisis) | 0–2 quarters | Coincident — the event itself is the signal |
+
+This lead time advantage is theoretical — a Zone 1 maturity wall signal does not mean a credit event is imminent. It means the structural vulnerability is visible and should be monitored in combination with the other metrics. The lead time becomes actionable when Zone 1 visibility is combined with deteriorating FCF, coverage, or leverage trends — the maturity wall defines the destination, the other metrics define how quickly the company is approaching it.
+
+---
+
+### The Dark Window Problem Is Smallest for This Metric
+
+The Q4 dark window — which is most severe for FCF and significant for coverage and leverage — is smallest for the maturity wall. This is because:
+
+The scheduled maturity dates are fixed and known from prior 10-K filings. The system does not need a new filing to know that a bond matures on March 15 next year — this was disclosed in the prior 10-K and is stored in the rolling schedule. The days-to-maturity countdown runs continuously regardless of the filing calendar.
+
+The only maturity wall information that goes dark during Q4 is intra-quarter debt events — new issuances or repayments that change the schedule. These are partially illuminated by 424B filings (same day) and 8-K Item 2.03 filings (within 4 business days), making the maturity wall the best-illuminated metric during the Q4 dark window.
+
+```
+Q4 dark window impact by metric (ranked most to least affected):
+
+1. FCF — worst affected: no OCF or capex data available
+2. Coverage — severely affected: no EBITDA update
+3. Leverage — moderately affected: no EBITDA update;
+              debt events partially visible via 8-K
+4. Liquidity — moderately affected: no balance sheet update;
+               revolver status partially visible via Item 1.01
+5. Debt Maturity Wall — least affected: schedule known from
+                        prior 10-K; debt events visible via
+                        424B and Item 2.03; days countdown
+                        continues regardless
+```
+
+---
+
+### Refinancing Activity Monitoring — The Unique Intra-Zone Signal
+
+The maturity wall is the only metric that generates a meaningful signal from the absence of activity as well as from the presence of activity. For every other metric, the absence of a filing means no update — neutral. For the maturity wall, the absence of a refinancing filing as a Zone 2 maturity approaches is itself a signal.
+
+```
+Refinancing Activity Monitor — Phase 3:
+
+For each issuer with a maturity in Zone 2
+(6–18 months away), activate refinancing tracking:
+
+Monitor for:
+   424B filings (new public bond issuances)
+   8-K Item 2.03 (new credit facilities, term loans)
+   8-K Item 1.01 (material agreement — revolving
+                  credit facility renewal or amendment)
+   8-K Item 8.01 (voluntary disclosure of refinancing
+                  completion — keyword: "refinanc",
+                  "tender offer", "redemption",
+                  "repurchase", "matured")
+
+Positive resolution signals:
+   New issuance with maturity > maturing instrument:
+      Flag: "refinancing activity detected —
+      [maturity] being addressed by [new instrument];
+      maturity alert downgrade pending confirmation"
+   Tender offer announcement for maturing bonds:
+      Flag: "tender offer for maturing bonds —
+      active liability management; monitor for
+      completion"
+   Revolver renewal confirmed (Item 1.01):
+      Flag: "revolving credit facility renewed —
+      liquidity backstop secured"
+
+Absence signal (no refinancing activity detected):
+   Zone 2 entry (180 days) → no activity for 30 days:
+      Flag: "no refinancing activity detected for
+      issuer with maturity in 150 days — monitor
+      for execution; lender access uncertain"
+   Zone 2 entry (180 days) → no activity for 60 days:
+      Escalate to Stress: "180-day maturity approaching
+      with no refinancing activity observed — elevated
+      execution risk"
+   Zone 3 entry (90 days) → no activity confirmed:
+      Escalate to Critical: "90-day maturity with no
+      confirmed refinancing or repayment plan —
+      near-term default risk elevated"
+```
+
+---
+
+### Interaction With Filing Calendar
+
+Unlike prior metrics which update on the filing calendar (40 days after quarter-end, 60 days after year-end), the maturity wall's most important signal — days to nearest maturity — updates every single day. The system does not need to wait for a filing to know that a maturity is 89 days away rather than 90. The days countdown should run continuously in the background as a standing daily computation, not a filing-triggered computation.
+
+```
+Daily computation (no filing required):
+For each issuer in portfolio:
+   For each maturity in rolling schedule:
+      Days_Remaining = maturity_date - today
+      If Days_Remaining crosses a threshold boundary:
+         Generate alert at new threshold level
+         Log: "days threshold crossed — maturity
+         [date] now [N] days away; alert escalated
+         from [prior level] to [new level]"
+
+This daily computation is the only place in the
+entire system where alerts are generated without
+a new filing triggering them. It is the maturity
+wall's unique contribution to real-time monitoring.
+```
+
+---
+
+### Comparison: Maturity Wall vs Other Metrics Signal Characteristics
+
+| Characteristic | Debt Maturity Wall | FCF | Coverage | Leverage | Liquidity |
+|---|---|---|---|---|---|
+| **Signal type** | Calendar-driven + structural | Flow deterioration | Flow deterioration | Stock accumulation | Stock depletion |
+| **Lead time** | 2–5 years (Zone 1) to 0 (Zone 3) | 4–6 quarters | 2–4 quarters | 2–4 quarters | 1–2 quarters |
+| **Updates from filings** | Annually (full schedule) + quarterly (near-term) + event-driven (patches) | Quarterly | Quarterly | Quarterly | Quarterly |
+| **Updates without filings** | ✅ Yes — daily countdown | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Absence-of-activity signal** | ✅ Yes — no refinancing in Zone 2 | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Q4 dark window severity** | Minimal | Severe | Significant | Moderate | Moderate |
+| **Predictable future event** | ✅ Yes — maturity date known | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Primary Phase 2 signal** | Near-term maturity coverage + daily countdown | FCF margin + conversion ratio | EBITDA coverage | Net Debt/EBITDA | Current + quick ratio |
+
+---
+
+### Updated Signal Timing Summary
+
+> **Signal Timing — Structurally unique: the only metric combining multi-year advance visibility with a fixed-date cliff event.**
+>
+> The debt maturity wall is detectable years before it becomes critical — WADM compression and concentration are visible in Zone 1 (18 months to 5 years) as structural vulnerabilities. In Zone 2 (6–18 months), the refinancing execution window is open and absence of activity is itself a stress signal. In Zone 3 (under 6 months), the wall is imminent and dominates all other metrics in urgency.
+>
+> Unlike every other metric in this spec, maturity wall alerts update daily through a continuous countdown computation — not just when filings arrive. A maturity crossing from 91 days to 89 days triggers a threshold escalation regardless of the filing calendar.
+>
+> The Q4 dark window is smallest for this metric — scheduled maturity dates are known from prior filings and the countdown continues uninterrupted. Intra-quarter debt events are partially illuminated by 424B and 8-K filings, making the maturity wall the best-monitored metric during the dark window period.
+>
+> The maturity wall's lead time advantage is the longest of any metric — 2–5 years of structural visibility in Zone 1. This advantage is realised only when combined with other metrics: FCF compression and leverage deterioration determine how quickly a company is approaching its wall, while the wall itself defines the deadline by which financial improvement must occur or refinancing must be executed. All five primary metrics — FCF, coverage, leverage, liquidity, and maturity wall — must be evaluated simultaneously to assess whether a company will reach its maturity wall in a position to successfully refinance.
+
