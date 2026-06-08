@@ -73,6 +73,7 @@ Coverage is also the metric most directly connected to cash reality.
 
 
 ## Why it signals stress
+> Appendix A
 
 Interest coverage signals stress through three distinct mechanisms, each operating on a different timeline.
 
@@ -83,6 +84,7 @@ Interest coverage signals stress through three distinct mechanisms, each operati
 - As coverage falls toward 1.0x, the company has essentially no margin for error.
 - A single bad quarter — an unexpected cost, a revenue shortfall, a working capital swing — can push it from barely covering interest to not covering it at all.
 - The ratio does not need to reach zero to trigger a crisis. It only needs to reach a point where the next quarterly variance could push it below 1.0x.
+  **conclusion: no need to be close to 0, it has been dangerous in 1.0x**
 
 ### Mechanism 2 — The refinancing feedback loop (medium term)
 
@@ -91,6 +93,7 @@ Interest coverage signals stress through three distinct mechanisms, each operati
 - New borrowing becomes more expensive — which directly increases future interest expense, which further compresses coverage.
 - This feedback loop is self-reinforcing: a falling coverage ratio raises the cost of the debt that is causing the coverage to fall.
 - Companies that enter this loop at coverage of 2.0x–3.0x can find themselves at 1.5x within two quarters simply because the cost of refinancing maturing debt has risen, even if EBITDA has not changed.
+   **conclusion: The refinancing feedback loop is self-reinforcing**
 
 ### Mechanism 3 — The earnings quality signal (early warning)
 
@@ -98,6 +101,128 @@ Interest coverage signals stress through three distinct mechanisms, each operati
 - A company declining from 8.0x to 5.0x to 3.0x over six quarters is sending a consistent directional message even if the absolute level has not yet crossed into danger territory.
 - The trend is the warning.
 - Coverage can function as an early warning indicator — a company does not need to reach a distressed absolute level for the trend to be actionable.
+  **conclusion: Coverage functions as a leading indicator**
+
+
+
+**Formula**
+> Appendix B
+---
+
+**Interest Coverage = EBIT / Interest Expense**
+
+This is the base definition used across most rating agency methodologies and academic literature. It uses EBIT rather than EBITDA because interest is a financing cost that sits below operating income — EBIT represents what the company earned from operations before paying lenders, which is the most direct measure of ability to service debt.
+
+However, in practice three formula versions are used depending on the analytical purpose, exactly as with leverage.
+
+---
+
+**Formula 1 — Automated Baseline (XBRL / Deterministic)**
+
+```
+Interest Coverage = EBIT / Interest Expense
+
+EBIT = Operating Income
+     = us-gaap:OperatingIncomeLoss
+
+Interest Expense = us-gaap:InterestExpense
+                 OR us-gaap:InterestAndDebtExpense (fallback)
+```
+
+**XBRL tags:**
+
+| Input | Primary XBRL Tag | Fallback Tag |
+|---|---|---|
+| EBIT (Operating Income) | `us-gaap:OperatingIncomeLoss` | `us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxes` |
+| Interest Expense | `us-gaap:InterestExpense` | `us-gaap:InterestAndDebtExpense` |
+
+**What is excluded:** D&A addback, interest income netting, capitalized interest adjustment, lease interest component. Purely what the structured filing reports.
+
+**Error handling:** If either input tag is missing, mark the ratio null and log which tag failed. Never silently compute with a zero substitute. If Interest Expense = 0 and the company carries visible debt, flag as "interest expense tag missing or zero — verify company has no debt before accepting."
+
+**Rule:** If Interest Expense = 0 but Total Debt (from Leverage Formula 1 extraction) > 0, then:
+1. Mark Interest Coverage = null (do not compute 0 or infinite)
+2. Log: "Interest expense reported as zero but debt exists — possible netting or tag error"
+3. Escalate to manual review queue
+
+**Important note on EBIT vs EBITDA for coverage:**
+Some practitioners use EBITDA/Interest Expense rather than EBIT/Interest Expense, arguing that D&A is non-cash and therefore available to service interest. Both versions are valid — they answer slightly different questions. EBIT/Interest asks "do operating earnings cover interest?" EBITDA/Interest asks "does operating cash generation cover interest?" For Formula 1, EBIT is preferred because it is directly tagged and requires no derivation. EBITDA coverage is computed separately as a supplementary figure.
+
+
+
+**Note on EBIT definition:** For Formula 1, EBIT is defined as `us-gaap:OperatingIncomeLoss`. The system does not attempt to add back non-operating income or expense. This is the cleanest XBRL-based definition and matches the most common rating agency starting point.
+
+---
+
+**Formula 2 — Moody's-Style (Adjusted, requires LLM footnote extraction)**
+
+```
+Interest Coverage = Moody's Adjusted EBIT / Moody's Adjusted Interest Expense
+
+Moody's Adjusted EBIT =
+    Operating Income
+  + Pension service cost reclassification
+  + Operating lease depreciation component (2/3 of annual rent expense)
+  − Non-recurring gains (if any)
+  [Does NOT add back restructuring charges]
+
+Moody's Adjusted Interest Expense =
+    Reported Interest Expense
+  + Pension interest cost reclassification
+    (excess pension expense over service cost, reclassified from operating to interest)
+  + Operating lease interest component (1/3 of annual rent expense)
+  − Capitalized interest (if any — not yet cash paid)
+```
+
+**What LLM must extract from footnotes:**
+- Annual operating rent expense (pre-ASC 842) or ROU lease liability (post-ASC 842) — same as Leverage Formula 2
+- Pension service cost and total pension expense — same as Leverage Formula 2
+- Capitalized interest amount (disclosed in PP&E footnote or interest expense footnote)
+
+**Net effect vs Formula 1:** Moody's adjusted interest expense is typically higher than reported interest expense because it adds the lease interest component and pension interest reclassification. Adjusted EBIT is also typically higher. The net direction of the coverage ratio depends on which adjustment dominates — for heavily leased businesses, the interest expense increase typically outweighs the EBIT increase, compressing coverage.
+
+---
+
+**Formula 3 — S&P-Style (Conservative, requires LLM footnote extraction)**
+
+S&P uses a fixed charge coverage ratio rather than pure interest coverage, which is more conservative because it includes lease payments as a fixed charge alongside interest.
+
+```
+Fixed Charge Coverage = S&P Adjusted EBITDA / Fixed Charges
+
+S&P Adjusted EBITDA =
+    Revenue
+  − Operating Expenses (as reported)
+  + D&A
+  [Restructuring charges: NOT added back]
+  [Stock-based compensation: NOT added back]
+  [Management fees: NOT added back]
+
+Fixed Charges =
+    Interest Expense (gross, not netted against interest income)
+  + Operating Lease Payments (current year)
+  + Preferred Dividends (if any)
+  [Capitalized interest: included — S&P treats it as a real cost]
+```
+
+Source: S&P Corporate Methodology: Ratios and Adjustments (maalot.co.il); S&P defines fixed charge coverage as a key ratio alongside Debt/EBITDA in the financial risk profile assessment.
+
+**Key difference from Moody's:** S&P includes the full operating lease payment in fixed charges (not just the interest component) and does not add lease depreciation back to EBIT. This makes S&P's fixed charge coverage consistently lower than Moody's interest coverage for leased businesses — S&P is more conservative on this metric as it is on leverage.
+
+**What LLM must extract from footnotes:**
+- Current year operating lease payments (from Lease footnote maturity table — the amount due within 12 months)
+- Preferred dividend amount (from equity section or dividend footnote — if applicable)
+- Capitalized interest (from PP&E footnote or interest expense footnote)
+
+
+
+**Implementation guidance**
+
+Formula 1 is the automated baseline for Phase 2. Both EBIT and Interest Expense are among the most reliably tagged items in XBRL — this ratio has fewer extraction challenges than leverage. The main failure mode is companies that net interest income against interest expense and report only a net figure, which understates gross interest expense and overstates coverage. Flag any case where `us-gaap:InterestExpense` appears lower than expected relative to the company's total debt load.
+
+Formulas 2 and 3 are reserved for Phase 3. Once implemented, the divergence between Formula 1 coverage and Formula 3 fixed charge coverage for the same company is itself an analytical signal — a large gap indicates the company has significant lease obligations that are not reflected in the headline interest coverage number.
+
+---
 
 
 
@@ -115,8 +240,7 @@ Interest coverage signals stress through three distinct mechanisms, each operati
 
 
 
-
-**Appendix A**
+## Appendix A
 ### Academic and institutional validation
 
 - Moody's explicitly states that interest coverage — measured as EBIT/Interest Expense — is one of its primary financial metrics across virtually all non-financial corporate rating methodologies, alongside leverage.
@@ -129,3 +253,30 @@ Interest coverage signals stress through three distinct mechanisms, each operati
 - Over the same period, its interest expense remained elevated because its debt load had not meaningfully decreased.
 - The result was a coverage ratio compressing toward and eventually below 1.0x in the quarters leading up to its October 2023 bankruptcy.
 - The coverage signal was visible in the same quarterly filings that showed leverage deteriorating — confirming that the two metrics move together in distress but that coverage often deteriorates faster because interest expense is sticky while EBITDA can fall quickly.
+
+
+
+## Appendix B
+
+
+```
+Supplementary: EBITDA Coverage = (Operating Income + D&A) / Interest Expense
+```
+
+---
+
+**Comparison Table**
+
+| | Formula 1 — Baseline | Formula 2 — Moody's | Formula 3 — S&P |
+|---|---|---|---|
+| **Numerator** | EBIT (Operating Income) | Adjusted EBIT | Adjusted EBITDA |
+| **Denominator** | Interest Expense | Adjusted Interest Expense | Fixed Charges (interest + lease payments + preferred dividends) |
+| **D&A in numerator** | ❌ No | ❌ No | ✅ Yes (EBITDA base) |
+| **Lease payments in denominator** | ❌ No | Partial (1/3 of rent as interest) | ✅ Full lease payment |
+| **Restructuring addback** | n/a | ❌ No | ❌ No |
+| **Capitalized interest excluded** | ❌ Not adjusted | ✅ Subtracted from interest | ✅ Included as fixed charge |
+| **Requires LLM** | ❌ No | ✅ Yes | ✅ Yes |
+| **Relative coverage level** | Mid | Higher than F1 for most companies | Lower than F2 |
+| **Implementation phase** | Phase 2 | Phase 3 | Phase 3 |
+
+---
