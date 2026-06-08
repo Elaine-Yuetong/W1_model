@@ -155,3 +155,194 @@ A system that monitors only leverage and coverage is entering the sequence at st
 | Declining FCF trend | 3–4 consecutive quarters (even positive) | Watch (earliest warning) |
 
 
+## Formula
+
+> Appendix A
+
+---
+
+**Free Cash Flow = Operating Cash Flow − Capital Expenditures**
+
+This is the universal base definition used across rating agencies, investment banks, and academic literature. It is the simplest and most directly extractable version because both components are explicitly disclosed on the cash flow statement and reliably tagged in XBRL.
+
+However, as with leverage and interest coverage, three formula versions are needed depending on analytical purpose and adjustment philosophy.
+
+---
+
+**Formula 1 — Automated Baseline (XBRL / Deterministic)**
+
+```
+Free Cash Flow = Operating Cash Flow − Capital Expenditures
+
+FCF Margin = Free Cash Flow / Revenue
+
+OCF / EBITDA Conversion Ratio = Operating Cash Flow / EBITDA
+(EBITDA from Formula 1 of Leverage metric)
+
+Operating Cash Flow = us-gaap:NetCashProvidedByUsedInOperatingActivities
+
+Capital Expenditures = us-gaap:PaymentsToAcquirePropertyPlantAndEquipment
+```
+
+**XBRL tags:**
+
+| Input | Primary XBRL Tag | Fallback Tag |
+|---|---|---|
+| Operating Cash Flow | `us-gaap:NetCashProvidedByUsedInOperatingActivities` | `us-gaap:NetCashProvidedByUsedInOperatingActivitiesContinuingOperations` |
+| Capital Expenditures | `us-gaap:PaymentsToAcquirePropertyPlantAndEquipment` | `us-gaap:AcquisitionsNetOfCashAcquiredAndPurchasesOfBusinesses` |
+| Revenue (for FCF margin) | `us-gaap:Revenues` | `us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax` |
+| EBITDA (for conversion ratio) | Derived — see Leverage Formula 1 | — |
+
+**What is excluded:** Proceeds from asset sales, acquisitions, working capital adjustments beyond what is embedded in OCF, maintenance vs growth capex split, lease payments (post-ASC 842 finance lease principal payments are in financing activities and excluded). Purely what the structured filing reports.
+
+**Three derived outputs from Formula 1:**
+
+```
+Output 1 — FCF (absolute):
+Free Cash Flow = OCF − Capex
+Units: millions USD
+Signal: negative = company burning cash after sustaining assets
+
+Output 2 — FCF Margin:
+FCF Margin = FCF / Revenue × 100
+Units: percentage
+Signal: declining margin trend even when absolute FCF positive
+
+Output 3 — OCF/EBITDA Conversion Ratio:
+Conversion = OCF / EBITDA
+Units: ratio (target ≥ 0.70)
+Signal: falling conversion reveals working capital deterioration
+or earnings quality problems invisible in EBITDA alone
+```
+
+**Error handling:** If OCF is null, FCF = null. If Capex is null but OCF is non-null, compute OCF alone and flag: "capex not found — FCF cannot be computed; OCF reported as partial signal." Never treat missing capex as zero — this would produce a falsely optimistic FCF figure equal to full OCF.
+
+---
+
+**Formula 2 — Moody's-Style (Adjusted, requires LLM footnote extraction)**
+
+Moody's uses Retained Cash Flow (RCF) and Free Cash Flow after dividends as its primary cash flow metrics rather than simple OCF minus capex. The adjustments align cash flow with the same pension and lease adjustments applied to EBITDA and debt in Formula 2 of the Leverage metric.
+
+```
+Moody's Adjusted FCF =
+    Reported Operating Cash Flow
+  + Pension cash contributions added back
+    (cash pension contributions are deducted from OCF under GAAP
+     but Moody's treats them as financing — adds back to OCF)
+  − Maintenance Capex
+    (Moody's attempts to separate maintenance capex from growth
+     capex where disclosed — only maintenance capex is deducted
+     for the baseline FCF; growth capex is treated separately)
+  − Dividends paid (common and preferred)
+    (Moody's defines FCF after dividends as the residual available
+     for debt repayment — dividends are a semi-fixed obligation
+     for most investment-grade companies)
+
+Moody's Retained Cash Flow (RCF) =
+    Reported Operating Cash Flow
+  + Pension cash contribution addback
+  − Dividends paid
+  (RCF excludes capex — measures cash retained before reinvestment)
+
+RCF / Net Debt = cash generation relative to debt burden
+(companion ratio to Debt/EBITDA — used in Moody's rating grids)
+```
+
+**What LLM must extract from footnotes:**
+- Pension cash contributions for the period (from Pension Footnote — "Employer Contributions" table; same note as Leverage Formula 2)
+- Maintenance vs growth capex split, if disclosed (from MD&A capital expenditures discussion or PP&E footnote — many companies disclose this voluntarily; many do not)
+- Dividends paid (from cash flow statement financing section — semi-structured; usually tagged but verify)
+
+**Note on maintenance vs growth capex:** This is the single most contested input in FCF analysis. Most companies do not formally disclose the split between maintenance capex (spending required to keep existing assets functioning) and growth capex (spending to expand capacity). Where not disclosed, analysts use industry rules of thumb — typically D&A as a proxy for maintenance capex on the grounds that depreciation approximates economic asset consumption. Your system should: (1) use total capex for Formula 1 (most conservative, most auditable), (2) use D&A as a maintenance capex proxy for Formula 2 where the split is not disclosed, and (3) use company-disclosed split where available via LLM extraction from MD&A.
+
+```
+Maintenance Capex Proxy (where not disclosed):
+Maintenance Capex ≈ Depreciation & Amortization
+(from us-gaap:DepreciationDepletionAndAmortization)
+Flag: "maintenance capex proxied by D&A — actual split not
+disclosed; growth capex not separately identified"
+```
+
+> **Phase 2 note:** This proxy is NOT applied in Phase 2. Phase 2 uses total capex for Formula 1 only. The maintenance vs growth split (including the D&A proxy) is Phase 3 only, when LLM is available to detect whether the company discloses the split.
+
+---
+
+**Formula 3 — S&P-Style (Conservative, requires LLM footnote extraction)**
+
+S&P uses Free Operating Cash Flow (FOCF) and Discretionary Cash Flow (DCF) as its primary cash-based metrics. These are more conservative than Formula 1 because they include additional deductions.
+
+```
+S&P Free Operating Cash Flow (FOCF) =
+    Funds From Operations (FFO)
+  − Changes in Working Capital
+  − Capital Expenditures (total, not split)
+
+S&P Funds From Operations (FFO) =
+    Net Income
+  + D&A
+  + Deferred Taxes
+  + Other Non-Cash Items
+  − Gains on Asset Sales
+  [Note: FFO is S&P's version of adjusted OCF — it starts
+   from net income rather than operating cash flow, then
+   adjusts for non-cash items. It is more conservative than
+   OCF because it excludes working capital movements that
+   can temporarily inflate OCF]
+
+S&P Discretionary Cash Flow (DCF) =
+    FOCF
+  − Dividends (common and preferred)
+  − Share buybacks (if considered recurring)
+  [DCF represents cash truly available for debt repayment
+   after all cash obligations including capital returns]
+
+FOCF / Debt = primary S&P cash flow leverage ratio
+DCF / Debt = most conservative S&P cash flow metric
+```
+
+Source: S&P Corporate Methodology: Ratios and Adjustments (maalot.co.il); S&P defines FFO, FOCF, and DCF as its three primary cash flow metrics and uses FOCF/Debt and DCF/Debt alongside Debt/EBITDA in the financial risk profile assessment.
+
+**What LLM must extract from footnotes:**
+- Deferred tax expense / benefit (from income tax footnote — semi-structured, sometimes tagged)
+- Gains on asset sales (from income statement and MD&A — same as Leverage Formula 2 non-recurring gains)
+- Dividends paid (from financing section of cash flow statement — semi-structured)
+- Share buybacks classified as recurring vs opportunistic (from MD&A capital allocation discussion — unstructured; LLM judgment required)
+
+**Key difference from Moody's:** S&P starts from net income (bottom of income statement) and builds up to FFO, then deducts working capital and capex to reach FOCF. Moody's starts from reported OCF (already includes working capital) and makes targeted adjustments. For most companies the two approaches converge to similar numbers, but for companies with large deferred tax movements or significant non-cash items, the starting point matters materially.
+
+---
+
+
+
+**Implementation Guidance**
+
+Formula 1 is the automated baseline for Phase 2. Both OCF and capex are among the most consistently tagged items in the cash flow statement — extraction reliability is high. The three derived outputs (absolute FCF, FCF margin, OCF/EBITDA conversion) provide more diagnostic information than a single ratio and should all be computed and stored together.
+
+The OCF/EBITDA conversion ratio deserves particular attention in Phase 2. It requires no additional data beyond what is already extracted for Leverage Formula 1 (EBITDA) and FCF Formula 1 (OCF), and it provides the earliest signal of working capital deterioration or earnings quality problems. A company whose conversion ratio is falling from 0.90 to 0.75 to 0.60 over three quarters is telling you that EBITDA is becoming less and less representative of actual cash generation — which is the earliest warning the structured data can provide before FCF itself turns negative.
+
+Formulas 2 and 3 are reserved for Phase 3. The maintenance vs growth capex split (Formula 2) and the FFO construction (Formula 3) both require LLM footnote extraction and analyst judgment that are not appropriate for the Phase 2 MVP. Once implemented, the divergence between Formula 1 FCF and Formula 3 DCF for the same company is a direct measure of how much of the company's cash generation is being consumed by dividends and capital returns — itself a signal of financial flexibility.
+
+---
+
+
+
+
+
+
+### Appendix A
+**Comparison Table**
+
+| | Formula 1 — Baseline | Formula 2 — Moody's | Formula 3 — S&P |
+|---|---|---|---|
+| **Primary metric name** | Free Cash Flow (FCF) | Retained Cash Flow (RCF) / Adjusted FCF | Free Operating Cash Flow (FOCF) / Discretionary Cash Flow (DCF) |
+| **Starting point** | Operating Cash Flow (direct) | Operating Cash Flow + pension addback | Net Income → FFO → FOCF |
+| **Capex deduction** | Total capex | Maintenance capex only | Total capex |
+| **Dividends deducted** | ❌ No | ✅ Yes (FCF after dividends) | ✅ Yes (in DCF) |
+| **Pension adjustment** | ❌ No | ✅ Yes (contribution addback) | Partial (deferred tax captures some) |
+| **Working capital** | Embedded in OCF | Embedded in OCF | Explicitly separated in FFO→FOCF |
+| **Companion ratio** | FCF Margin; OCF/EBITDA | RCF/Net Debt | FOCF/Debt; DCF/Debt |
+| **Requires LLM** | ❌ No | ✅ Yes | ✅ Yes |
+| **Relative FCF level** | Mid | Higher (maintenance capex only; pension addback) | Lower (net income start; full capex; dividends) |
+| **Implementation phase** | Phase 2 | Phase 3 | Phase 3 |
+
+---
