@@ -1,6 +1,6 @@
+# Free Cash Flow 
 
-
-## Free Cash Flow — What it is
+## What it is
 
 ### 1. Basic Definition
 
