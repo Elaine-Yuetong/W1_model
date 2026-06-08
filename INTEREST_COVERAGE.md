@@ -177,7 +177,12 @@ Moody's Adjusted Interest Expense =
 **What LLM must extract from footnotes:**
 - Annual operating rent expense (pre-ASC 842) or ROU lease liability (post-ASC 842) — same as Leverage Formula 2
 - Pension service cost and total pension expense — same as Leverage Formula 2
+  > See LEVERAGE.md → Section "Where it lives" → Item 2a (Operating Lease Rent Expense) — same footnote location applies
+  > See LEVERAGE.md → Section "Where it lives" → Item 2b and 2c (ROU lease liability and Pension PBO) — same footnote locations apply
+  
 - Capitalized interest amount (disclosed in PP&E footnote or interest expense footnote)
+
+
 
 **Net effect vs Formula 1:** Moody's adjusted interest expense is typically higher than reported interest expense because it adds the lease interest component and pension interest reclassification. Adjusted EBIT is also typically higher. The net direction of the coverage ratio depends on which adjustment dominates — for heavily leased businesses, the interest expense increase typically outweighs the EBIT increase, compressing coverage.
 
@@ -205,7 +210,7 @@ Fixed Charges =
   [Capitalized interest: included — S&P treats it as a real cost]
 ```
 
-Source: S&P Corporate Methodology: Ratios and Adjustments (maalot.co.il); S&P defines fixed charge coverage as a key ratio alongside Debt/EBITDA in the financial risk profile assessment.
+Source: S&P Corporate Methodology: Ratios and Adjustments (maalot.co.il); S&P defines fixed charge coverage as a key ratio alongside Debt/EBITDA in the financial risk profile assessment. (No change — this is an external citation, not an internal cross-reference)
 
 **Key difference from Moody's:** S&P includes the full operating lease payment in fixed charges (not just the interest component) and does not add lease depreciation back to EBIT. This makes S&P's fixed charge coverage consistently lower than Moody's interest coverage for leased businesses — S&P is more conservative on this metric as it is on leverage.
 
@@ -266,6 +271,9 @@ All adjustment items are unstructured — they require LLM extraction from footn
 | Exact location within footnote | Look for a sentence or table disclosing "capitalized interest" or "interest capitalized during the period." It typically appears as a reconciliation: gross interest incurred minus capitalized interest equals interest expense charged to income. |
 | What LLM should extract | Single number: total interest capitalized during the period. Moody's subtracts this from reported interest expense because capitalized interest has not yet been charged to the income statement — it is not a current cash obligation against earnings. |
 
+> See LEVERAGE.md → Section "Where it lives" → Item 2a (Operating Lease Rent Expense) — identical location; apply identical extraction
+
+
 **Item 2b — Pension Interest Cost Reclassification**
 
 | Field | Detail |
@@ -279,7 +287,7 @@ All adjustment items are unstructured — they require LLM extraction from footn
 
 | Field | Detail |
 |---|---|
-| Where it lives | Lease Footnote (same note as described in Leverage Formula 2 — typically Note 5–8) |
+| Where it lives | Lease Footnote (same note as described in Leverage Formula 2 — typically Note 5–8) See LEVERAGE.md → Section "Where it lives" → Item 2c (Pension PBO and Plan Assets) — identical footnote location; extract same fields |
 | Available in | 10-K and 10-Q (post-ASC 842) |
 | Exact location within footnote | The "Lease Cost" table in the Lease Footnote, which breaks down total lease cost into: operating lease cost, finance lease interest cost, and finance lease amortization. For operating leases, the interest component is not separately stated — Moody's estimates it as 1/3 of total annual operating lease expense. |
 | What LLM should extract | Total annual operating lease expense (same figure used in Leverage Formula 2). The system then applies the 1/3 rule to derive the interest component for the denominator adjustment. |
