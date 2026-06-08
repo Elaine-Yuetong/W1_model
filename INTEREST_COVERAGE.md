@@ -278,7 +278,7 @@ All adjustment items are unstructured — they require LLM extraction from footn
 
 | Field | Detail |
 |---|---|
-| Where it lives | Pension / Employee Benefits Footnote (same note as described in Leverage Formula 2 — typically Note 8–12) |
+| Where it lives | Pension / Employee Benefits Footnote — See LEVERAGE.md → Section "Where it lives" → Item 2c (Pension PBO and Plan Assets) — identical footnote location (typically Note 8–12); extract pension interest cost from "Net Periodic Benefit Cost" table, same table used for Leverage Formula 2 |
 | Available in | 10-K only |
 | Exact location within footnote | The "Net Periodic Benefit Cost" table. Look for the line items "Interest cost" and "Service cost" within that table. Moody's reclassifies the excess of total pension expense over service cost — including the interest cost component — from operating expense to interest expense. |
 | What LLM should extract | Two numbers from the Net Periodic Benefit Cost table: (1) Service cost, (2) Interest cost. The interest cost component is added to the interest expense denominator under Moody's adjusted methodology. |
@@ -287,7 +287,7 @@ All adjustment items are unstructured — they require LLM extraction from footn
 
 | Field | Detail |
 |---|---|
-| Where it lives | Lease Footnote (same note as described in Leverage Formula 2 — typically Note 5–8) See LEVERAGE.md → Section "Where it lives" → Item 2c (Pension PBO and Plan Assets) — identical footnote location; extract same fields |
+| Where it lives | Lease Footnote — See LEVERAGE.md → Section "Where it lives" → Item 2b (ROU Lease Liability and Operating Lease Expense) — identical location (typically Note 5–8); extract total annual operating lease expense from "Lease Cost" table, same figure used in Leverage Formula 2 |
 | Available in | 10-K and 10-Q (post-ASC 842) |
 | Exact location within footnote | The "Lease Cost" table in the Lease Footnote, which breaks down total lease cost into: operating lease cost, finance lease interest cost, and finance lease amortization. For operating leases, the interest component is not separately stated — Moody's estimates it as 1/3 of total annual operating lease expense. |
 | What LLM should extract | Total annual operating lease expense (same figure used in Leverage Formula 2). The system then applies the 1/3 rule to derive the interest component for the denominator adjustment. |
@@ -346,8 +346,8 @@ All adjustment items are unstructured — they require LLM extraction from footn
 | **Current Year Operating Lease Payments** | F3 | No standard tag for Year 1 of maturity schedule | **Unstructured — LLM required** | Lives in Lease Footnote maturity schedule table. LLM should read the first row of the operating lease maturity table — labeled "Less than 1 year," "Within 1 year," or the next fiscal year (e.g., "2026"). This is the full lease payment used in S&P's fixed charges denominator — not just the interest component. Available in both 10-K and 10-Q. |
 | **Preferred Dividends** | F3 | `us-gaap:PreferredStockDividendsAndOtherAdjustments` (if tagged) | Semi-structured — sometimes tagged, sometimes footnote only | Appears as a deduction below net income on the income statement. If not tagged, LLM should read the Equity Footnote (typically Note 10–15) to extract dividend rate and compute total. For most investment-grade corporate bond issuers this will be zero — flag if non-zero as it materially reduces fixed charge coverage. |
 | **Gross vs Net Interest Confirmation** | F3 | No tag — policy disclosure | **Unstructured — LLM required** | LLM should read Note 1 (Summary of Significant Accounting Policies) or a standalone interest footnote to confirm whether the company presents interest gross or net. If net presentation confirmed: LLM must also extract gross interest expense and interest income separately so the system can use gross in the denominator. Flag: "interest presented net — gross figure reconstructed from footnote." |
-| **Restructuring Charges** | F3 | `us-gaap:RestructuringCharges` (sometimes tagged) | Semi-structured — tagged on income statement, detail in footnote | Same treatment as Leverage Formula 3. S&P does not add back restructuring — it remains as an operating cost reducing Adjusted EBITDA. Confirm amount and treatment via LLM if material. |
-| **Stock-Based Compensation** | F3 | `us-gaap:ShareBasedCompensation` | Structured — reliably tagged in cash flow statement | Same treatment as Leverage Formula 3. S&P does not add back SBC to EBITDA. Tag used only to identify and confirm the amount is not added back. Flag in audit log. |
+| **Restructuring Charges** | F3 | `us-gaap:RestructuringCharges` (sometimes tagged) | Semi-structured — tagged on income statement, detail in footnote | See LEVERAGE.md → Section "Structured or Unstructured" → Restructuring Charges row — apply identical treatment; S&P does not add back restructuring — it remains as an operating cost reducing Adjusted EBITDA. |
+| **Stock-Based Compensation** | F3 | `us-gaap:ShareBasedCompensation` | Structured — reliably tagged in cash flow statement | See LEVERAGE.md → Section "Structured or Unstructured" → Stock-Based Compensation row — apply identical treatment; S&P does not add back SBC to EBITDA. Tag used only to identify and confirm the amount is not added back. Flag in audit log. |
 
 
 ## Phase 2 Handling for Semi-Structured Items
@@ -716,7 +716,7 @@ Example (standard volatility):
 
 ### Step 4 — Sector Exceptions
 
-Same sector exceptions as Leverage apply. Financial institutions, insurance companies, REITs, and project finance entities are outside the scope of Tables 4.7–4.9 for coverage as well as leverage.
+See LEVERAGE.md → Section "Stress Threshold" → Step 4 (Sector Exceptions) — apply identical sector exception list; financial institutions, insurance, REITs, project finance all excluded. Financial institutions, insurance companies, REITs, and project finance entities are outside the scope of Tables 4.7–4.9 for coverage as well as leverage.
 
 Two additional sector-specific notes for coverage:
 
@@ -795,7 +795,7 @@ Identical framework to Leverage, with one important difference: the Item 2.02 le
 
 ### Staleness Analysis
 
-Identical staleness structure to Leverage — the data is between 40 and 182 days old depending on where in the quarterly cycle the filing arrives. The full staleness table from the Leverage Signal Timing section applies here without modification.
+See LEVERAGE.md → Section "Signal Timing" → Staleness Analysis table — apply identical staleness profile; no modification required, depending on where in the quarterly cycle the filing arrives. The full staleness table from the Leverage Signal Timing section applies here without modification.
 
 One coverage-specific addition: interest expense is a duration item that accrues daily. A company that issues $1B of new 8% bonds on the first day of Q3 will show the full quarter's interest on those bonds in the Q3 10-Q. A company that issues the same bonds on the last day of Q3 will show almost no interest in Q3 — it appears fully only in Q4. This means the timing of debt issuance within a quarter affects how quickly the interest expense impact shows up in reported figures, creating up to one full quarter of additional lag between a debt event and its full coverage impact appearing in filed financials.
 
@@ -831,7 +831,7 @@ One coverage-specific addition: interest expense is a duration item that accrues
 
 ### Overview
 
-Interest coverage shares the same six-channel update structure as leverage. The update schedule, filing deadlines, and EDGAR availability rules are identical — refer to the Leverage Frequency section for the full channel definitions, 8-K filtering rules, and expected filing volumes by issuer type.
+Interest coverage shares the same six-channel update structure as leverage. The update schedule, filing deadlines, and EDGAR availability rules are identical — See LEVERAGE.md → Section "Frequency" → full section — apply identical six-channel update structure, 8-K filtering rules, and Phase 2 vs Phase 3 priority framework, 8-K filtering rules, and expected filing volumes by issuer type.
 
 This section documents only the differences and coverage-specific considerations that do not appear in the Leverage Frequency section.
 
@@ -861,7 +861,8 @@ All six channels apply without modification:
 | Debt acceleration / default | 8-K Item 2.04 | ✅ Monitor (alert only) | ✅ Monitor |
 | New bond issuance | 424B prospectus | ❌ Ignore | ✅ Add (with caveat — see below) |
 
-Filing deadlines are identical: 40 calendar days after quarter-end for large accelerated filers (10-Q), 60 days after fiscal year-end (10-K), 4 business days after triggering event (8-K Items 2.03 and 2.04). EDGAR availability within minutes of acceptance. All sourced and validated in the Leverage Frequency section.
+Filing deadlines are identical: 40 calendar days after quarter-end for large accelerated filers (10-Q), 60 days after fiscal year-end (10-K), 4 business days after triggering event (8-K Items 2.03 and 2.04). EDGAR availability within minutes of acceptance. All sourced and validated in the Leverage Frequency section, detailedly see this path: 
+ > See LEVERAGE.md → Section "Frequency" → full section — all filing deadlines, EDGAR availability rules, and channel definitions identical; this section documents coverage-specific differences only
 
 ---
 
