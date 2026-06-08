@@ -249,7 +249,7 @@ RCF / Net Debt = cash generation relative to debt burden
 ```
 
 **What LLM must extract from footnotes:**
-- Pension cash contributions for the period (from Pension Footnote — "Employer Contributions" table; same note as Leverage Formula 2)
+- Pension cash contributions for the period (from Pension Footnote — "Employer Contributions" table; See LEVERAGE.md → Section "Where it lives" → Item 2c (Pension PBO and Plan Assets) — same Pension Footnote location; extract employer contributions from same table)
 - Maintenance vs growth capex split, if disclosed (from MD&A capital expenditures discussion or PP&E footnote — many companies disclose this voluntarily; many do not)
 - Dividends paid (from cash flow statement financing section — semi-structured; usually tagged but verify)
 
@@ -304,7 +304,7 @@ Source: S&P Corporate Methodology: Ratios and Adjustments (maalot.co.il); S&P de
 
 **What LLM must extract from footnotes:**
 - Deferred tax expense / benefit (from income tax footnote — semi-structured, sometimes tagged)
-- Gains on asset sales (from income statement and MD&A — same as Leverage Formula 2 non-recurring gains)
+- Gains on asset sales (from income statement and MD&A — See LEVERAGE.md → Section "Where it lives" → Item 2d (Non-Recurring Gains) — apply identical extraction; LLM reads MD&A Results of Operations)
 - Dividends paid (from financing section of cash flow statement — semi-structured)
 - Share buybacks classified as recurring vs opportunistic (from MD&A capital allocation discussion — unstructured; LLM judgment required)
 
@@ -357,7 +357,7 @@ All adjustment items below are in addition to the Formula 1 base inputs.
 |---|---|
 | Where it lives | Cash Flow Statement — Operating Activities section AND Pension Footnote |
 | Available in | 10-K and 10-Q |
-| Exact location | Cash flow statement operating section: look for line item "Pension contributions," "Contributions to pension plans," or "Payments to defined benefit pension plans." This is a cash outflow within operating activities that reduces reported OCF. Moody's adds it back because it treats pension funding as a financing activity. The Pension Footnote (same note as Leverage Formula 2 — typically Note 8–12) also discloses total employer contributions for the year in the "Plan Assets" or "Employer Contributions" table — use as verification. |
+| Exact location | Cash flow statement operating section: look for line item "Pension contributions," "Contributions to pension plans," or "Payments to defined benefit pension plans." This is a cash outflow within operating activities that reduces reported OCF. Moody's adds it back because it treats pension funding as a financing activity. The Pension Footnote (See LEVERAGE.md → Section "Where it lives" → Item 2c (Pension PBO and Plan Assets) — identical location; use same unfunded deficit figure extracted for Leverage Formula 2) also discloses total employer contributions for the year in the "Plan Assets" or "Employer Contributions" table — use as verification. |
 | What LLM should extract | Single number: total cash pension contributions paid during the period. If the cash flow statement line item is tagged, use the tag. If not tagged (common for smaller contributions bundled into "other" operating items), LLM should read the Pension Footnote employer contributions disclosure. |
 | XBRL tag if available | `us-gaap:PensionContributions` — semi-structured; present for companies with material defined benefit plans; absent for companies without or with immaterial plans |
 
@@ -433,7 +433,7 @@ All adjustment items below are in addition to the Formula 1 base inputs.
 | Operating Cash Flow | F1 | Cash Flow Statement | Operating Activities subtotal | Both |
 | Capital Expenditures | F1 | Cash Flow Statement | Investing Activities | Both |
 | Revenue | F1 | Income Statement | Top line | Both |
-| EBITDA (conversion ratio) | F1 | Derived from Income Statement + Cash Flow Statement | See Leverage Formula 1 | Both |
+| EBITDA (conversion ratio) | F1 | Derived from Income Statement + Cash Flow Statement | See LEVERAGE.md → Section "Formula" → Formula 1 (EBITDA = Operating Income + D&A) — apply identical derivation; reuse stored EBITDA value from Leverage extraction | Both |
 | Pension cash contributions | F2 | Cash Flow Statement + Pension Footnote | Operating Activities + employer contributions table | Both |
 | Maintenance vs growth capex split | F2 | MD&A + PP&E Footnote | Liquidity and Capital Resources subsection | 10-K primarily |
 | Dividends paid | F2, F3 | Cash Flow Statement | Financing Activities | Both |
@@ -453,7 +453,7 @@ All adjustment items below are in addition to the Formula 1 base inputs.
 | **Capital Expenditures (PP&E)** | F1, F2, F3 | Primary: `us-gaap:PaymentsToAcquirePropertyPlantAndEquipment` Fallback 1: `us-gaap:PaymentsForCapitalImprovements` Fallback 2: `us-gaap:PaymentsToAcquireOtherPropertyPlantAndEquipment` | Structured — with labeling variation risk | Appears as negative number (cash outflow) in investing activities. Most companies tag this reliably. Main risk is companies that use non-standard labels — "additions to fixed assets," "investment in property" — which may not map to the primary tag. Always presented as a positive number in the tag value despite being a cash outflow — do not double-negate. |
 | **Intangible / Software Capex** | F1 flag | Primary: `us-gaap:PaymentsToAcquireIntangibleAssets` Fallback: `us-gaap:PaymentsToDevelopSoftware` | Structured — supplementary flag only | Not included in Formula 1 FCF computation but checked separately. If material (>15% of PP&E capex), flag: "significant intangible / software capex identified — total capital investment understated in Formula 1; consider adding for technology sector issuers." |
 | **Revenue** | F1 | Primary: `us-gaap:Revenues` Fallback: `us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax` | Structured | Used only for FCF margin computation. Same tag as Leverage and Coverage metrics — already extracted if those metrics computed first. |
-| **EBITDA** (for OCF/EBITDA conversion ratio) | F1 | Derived — see Leverage Formula 1 | Structured inputs, derived result | Already computed as part of Leverage Formula 1. No additional extraction needed — reuse stored value. If Leverage Formula 1 EBITDA is null for this period, mark conversion ratio null separately; do not suppress FCF computation. |
+| **EBITDA** (for OCF/EBITDA conversion ratio) | F1 | See LEVERAGE.md → Section "Structured or Unstructured" → Stock-Based Compensation row — apply identical treatment; amount tagged in cash flow statement; S&P does not add back. | Structured inputs, derived result | See LEVERAGE.md → Section "Structured or Unstructured" → Stock-Based Compensation row — apply identical treatment; amount tagged in cash flow statement; S&P does not add back. No additional extraction needed — reuse stored value. If Leverage Formula 1 EBITDA is null for this period, mark conversion ratio null separately; do not suppress FCF computation. |
 | **Free Cash Flow** (derived) | F1 | No standard tag | Structured inputs, derived result | FCF = OCF − Capex. No direct XBRL tag exists. Must be derived. If OCF is non-null but Capex is null, compute OCF alone and flag: "capex missing — FCF null; OCF reported as partial signal." Never treat missing capex as zero. |
 | **FCF Margin** (derived) | F1 | No standard tag | Structured inputs, derived result | FCF Margin = FCF / Revenue. If FCF is null or Revenue is null, mark FCF Margin null. Store alongside absolute FCF. |
 | **OCF / EBITDA Conversion Ratio** (derived) | F1 | No standard tag | Structured inputs, derived result | Conversion = OCF / EBITDA. If EBITDA is zero or negative, mark conversion ratio undefined and flag: "EBITDA zero or negative — conversion ratio not meaningful." If EBITDA is null, mark conversion ratio null separately — do not suppress OCF or FCF. |
