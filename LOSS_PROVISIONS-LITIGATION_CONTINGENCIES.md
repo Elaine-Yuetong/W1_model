@@ -545,7 +545,7 @@ Unlike all prior metrics, there is no universal graduated ratio threshold. The a
 
 **Dimension 1 — Provision Balance as % of EBITDA**
 
-This is the closest equivalent to a ratio threshold for this metric. It measures whether the recorded provision stock is material relative to earnings capacity.
+This is the closest equivalent to a ratio threshold for this metric. It measures whether the recorded provision stock is material relative to earnings capacity. EBITDA denominator: See LEVERAGE.md → Section "Extraction Fallback Logic" → derived EBITDA value — use stored annual EBITDA (TTM preferred) as denominator; no re-extraction required.
 
 | Provision Balance / Annual EBITDA | Interpretation | Alert Level |
 |---|---|---|
@@ -588,17 +588,17 @@ This is the most operationally critical threshold — it measures whether an adv
 
 **Dimension 4 — Current Period Provision Charge vs EBITDA**
 
-Large single-quarter provisions distort EBITDA and all EBITDA-dependent ratios.
+Large single-quarter provisions distort EBITDA and all EBITDA-dependent ratios. EBITDA denominator: See LEVERAGE.md → Section "Extraction Fallback Logic" → derived EBITDA value — use stored quarterly EBITDA; See INTEREST_COVERAGE.md → Section "Formula" → Formula 1 (EBIT) — flag when provision causes ratio deterioration in those metrics.
 
 | Provision Charge / Quarterly EBITDA | Interpretation | Alert Level |
 |---|---|---|
 | < 5% | Immaterial to quarterly earnings | No alert |
 | 5% – 20% | Moderate impact — EBITDA reduced but manageable | Watch |
-| 20% – 50% | Material — leverage and coverage ratios distorted | Flag — cross-reference Leverage and Coverage alerts; flag as litigation-driven |
+| 20% – 50% | Material — leverage and coverage ratios distorted | Flag — See LEVERAGE.md → Section "Stress Threshold" → Step 3 (Alert Trigger Rules) and INTEREST_COVERAGE.md → Section "Stress Threshold" → Step 3 — append cause note to those metric alerts: "ratio deterioration litigation-driven — see LOSS_PROVISIONS.md alert for [period]" |
 | > 50% | Severe — EBITDA dominated by provision charge | Stress — alert with note: "ratio deterioration litigation-driven; verify operational EBITDA separately" |
 | Provision charge causes EBITDA negative | Automatic escalation | Critical |
 
-**System rule for ratio distortion:** When a large provision charge causes deterioration in the Leverage or Coverage metrics, the system should flag those ratio alerts with: "Ratio deterioration partially or wholly driven by litigation provision charge of $X million — operational EBITDA was $Y million excluding provision." This prevents the system from conflating a legal event with operational deterioration.
+**System rule for ratio distortion:** When a large provision charge causes deterioration in the Leverage or Coverage metrics: See LEVERAGE.md → Section "Stress Threshold" → Step 3 (Alert Trigger Rules) and INTEREST_COVERAGE.md → Section "Stress Threshold" → Step 3 — append to those metric alerts: "Ratio deterioration partially or wholly driven by litigation provision charge of $X million — operational EBITDA was $Y million excluding provision." This prevents the system from conflating a legal event with operational deterioration.
 
 ---
 
@@ -637,7 +637,7 @@ Some litigation matters accumulate unreported between quarterly filings — a co
 
 **Filing lag:** 40 days after quarter-end for 10-Q; 60 days for 10-K. Same as all periodic filing metrics. 8-K disclosures available within 4 business days of event. The gap between Mode 2 event occurrence and 8-K filing (up to 4 business days) is the minimum detection lag for real-time events.
 
-**Interaction with EBITDA Margin Trend and Leverage:** When a large provision charge appears, it simultaneously triggers alerts in Loss Provisions, EBITDA Margin Trend, and Leverage/Coverage. The system should correlate these alerts and identify the common cause: "Leverage ratio deterioration in [period] attributed to $X million litigation provision charge — operational metrics unaffected." This cross-metric correlation is a Phase 3 capability requiring the LLM layer to identify the provision charge as a specific income statement item.
+**Interaction with EBITDA Margin Trend and Leverage:** When a large provision charge appears, it simultaneously triggers alerts in Loss Provisions, EBITDA Margin Trend, and Leverage/Coverage — See LEVERAGE.md → Section "Signal Timing", INTEREST_COVERAGE.md → Section "Signal Timing", and EBITDA_MARGIN_TREND.md → Section "Signal Timing" — cross-reference those metric alerts when provision charge is identified as cause; add correlation note to all affected metric outputs. The system should correlate these alerts and identify the common cause: "Leverage ratio deterioration in [period] attributed to $X million litigation provision charge — operational metrics unaffected." This cross-metric correlation is a Phase 3 capability requiring the LLM layer to identify the provision charge as a specific income statement item.
 
 ---
 
@@ -672,7 +672,7 @@ This metric has the most irregular update pattern of any metric in the spec — 
 In Phase 2, this metric is limited to:
 - XBRL balance sheet provision tag extraction (semi-structured, often null)
 - 8-K keyword monitoring for litigation-related filings for issuers already flagged on other metrics
-- Going concern keyword detection (already implemented for Liquidity and Covenant Headroom)
+- Going concern keyword detection — See LIQUIDITY.md → Section "Frequency" → going concern monitoring and COVENANT_HEADROOM.md → Section "Frequency" → keyword scan — going concern detection is already active system-wide; Loss Provisions uses the same keyword scan without modification
 
 Phase 2 cannot deliver the core analytical value of this metric — language tier classification, cross-period matter tracking, and unrecorded contingency detection all require Phase 3 LLM. Phase 2 contribution is a rough binary flag: provision balance exists and is growing vs stable, confirmed by XBRL where available.
 
