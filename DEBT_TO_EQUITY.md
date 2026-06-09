@@ -24,7 +24,7 @@ D/E signals stress through two mechanisms distinct from the leverage metric.
 
 ### Formula
 
-**Extraction note:** All inputs for this metric are already extracted as part of the Leverage metric (Total Debt) and are available from the balance sheet (Shareholders' Equity). No additional XBRL queries are required beyond what Leverage extraction already captures. This section documents only what is incremental.
+**Extraction note:** See LEVERAGE.md → Section "Formula" → Formula 1 XBRL Tags table and Section "Extraction Fallback Logic" → Inputs 1–3 — reuse all stored Total Debt values; no re-extraction required. and are available from the balance sheet (Shareholders' Equity). No additional XBRL queries are required beyond what Leverage extraction already captures. This section documents only what is incremental.
 
 ```
 Debt-to-Equity Ratio = Total Debt / Shareholders' Equity
@@ -32,7 +32,7 @@ Debt-to-Equity Ratio = Total Debt / Shareholders' Equity
 Total Debt = Short-Term Borrowings
            + Current Portion of Long-Term Debt
            + Long-Term Debt (Non-Current)
-           (identical definition to Leverage Formula 1)
+           (See LEVERAGE.md → Section "Formula" → Formula 1 (Total Debt definition) — apply identical three-component definition)
 
 Shareholders' Equity = us-gaap:StockholdersEquity
                     OR us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest
@@ -63,7 +63,7 @@ Variant 2 stored as supplementary.
 | Shareholders' Equity | `us-gaap:StockholdersEquity` | `us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` |
 | Total Liabilities (supplementary) | `us-gaap:Liabilities` | Derived from Assets − Equity |
 
-Total Debt tags: cross-reference Leverage Formula 1 extraction — already extracted; reuse stored value.
+Total Debt tags: Total Debt tags: See LEVERAGE.md → Section "Formula" → Formula 1 XBRL Tags table — reuse all stored debt tag values; no re-extraction required.
 
 **Error handling:**
 ```
@@ -75,15 +75,14 @@ If Shareholders' Equity < 0: ratio negative
    is the stress signal"
    Do NOT suppress — store the negative equity
    value and generate alert
-If Total Debt null: cross-reference Leverage
-   metric null handling — same propagation applies
+If Total Debt null: See LEVERAGE.md → Section "Extraction Fallback Logic" → Inputs 1–4 — apply identical null propagation logic
 ```
 
 ---
 
 ### Where it lives
 
-All debt inputs: cross-reference Leverage metric — Where it lives section. No new locations.
+All debt inputs: See LEVERAGE.md → Section "Where it lives" → Formula 1 table — all debt line item locations identical; no new locations required.
 
 **Incremental input only — Shareholders' Equity:**
 
@@ -101,7 +100,7 @@ All structured. Shareholders' equity is one of the most reliably tagged items in
 
 | Input | XBRL Tag | Structured or Unstructured |
 |---|---|---|
-| Total Debt | Reuse from Leverage Formula 1 | Structured — already extracted |
+| Total Debt | See LEVERAGE.md → Section "Formula" → Formula 1 outputs — reuse stored value; no re-extraction | Structured — already extracted |
 | Shareholders' Equity | `us-gaap:StockholdersEquity` | Structured — reliable |
 | Total Liabilities (supplementary) | `us-gaap:Liabilities` | Structured — required GAAP subtotal |
 
@@ -109,7 +108,7 @@ All structured. Shareholders' equity is one of the most reliably tagged items in
 
 ### Extraction Fallback Logic
 
-Cross-reference Leverage metric Extraction Fallback Logic for all debt inputs — identical fallback chain applies.
+See LEVERAGE.md → Section "Extraction Fallback Logic" → Inputs 1 through 4 (Short-Term Borrowings, Current LT Debt, Long-Term Debt, Total Debt derived) — apply identical fallback chains in full.
 
 **Incremental fallback for Shareholders' Equity only:**
 
@@ -316,15 +315,15 @@ D/E moves slowly because both debt and equity are stock measures that change gra
 
 The one scenario where D/E leads the other metrics is **equity erosion without new debt.** A company generating large net losses will see its equity base shrink quarter over quarter even if it takes on no new debt — D/E rises while leverage (Net Debt / EBITDA) may appear stable if EBITDA has not yet collapsed. This makes D/E a useful cross-check on the leverage metric for companies with large goodwill impairments, restructuring charges, or pension losses flowing through other comprehensive income.
 
-**Filing lag:** Identical to Leverage — 40 days after quarter-end for large accelerated filers. Balance sheet data; no intra-quarter updates.
+**Filing lag:** See LEVERAGE.md → Section "Signal Timing" → Three-Tier Timing Structure table — apply identical Tier 1 filing lag of 40 days; no intra-quarter updates for balance sheet items.
 
 ---
 
 ### Frequency
 
-Identical to Leverage metric Frequency section. Updates quarterly via 10-Q and annually via 10-K. No intra-quarter structured update possible — equity changes only appear on the balance sheet at filing dates. Going concern keyword monitoring applies as documented in the Liquidity metric.
+See LEVERAGE.md → Section "Frequency" → full section — apply identical update schedule, 8-K channel definitions, and Phase 2 vs Phase 3 priority framework; no modifications required. Going concern keyword monitoring: See LIQUIDITY.md → Section "Frequency" → going concern monitoring — apply identical keyword scan.
 
-Cross-reference: Leverage Frequency section for full channel definitions, 8-K filtering rules, and Phase 2 vs Phase 3 priority framework.
+See LEVERAGE.md → Section "Frequency" → full section — apply identical update schedule, 8-K channel definitions, and Phase 2 vs Phase 3 priority framework; no modifications required. Going concern keyword monitoring: See LIQUIDITY.md → Section "Frequency" → going concern monitoring — apply identical keyword scan.
 
 
 
