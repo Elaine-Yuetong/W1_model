@@ -132,7 +132,7 @@ Output 3 — Trend classification:
            Accelerating Decline / Recovering
 ```
 
-**Extraction note:** Revenue is already extracted as part of FREE_CASH_FLOW.md (FCF Margin computation) and EBITDA_MARGIN_TREND.md. No additional XBRL queries required. Reuse stored values from those metrics.
+**Extraction note:** See FREE_CASH_FLOW.md → Section "Formula" → Revenue input (us-gaap:Revenues) and EBITDA_MARGIN_TREND.md → Section "Formula" → Revenue input — reuse stored values; no re-extraction required.
 
 **XBRL tags (for reference only — already extracted):**
 
@@ -325,7 +325,7 @@ Projected EBITDA impact:
        Current Revenue × (1 + avg quarterly
        decline rate × 2 quarters forward)
    Projected_Margin =
-       EBITDA_MARGIN_TREND.md Output 1
+       See EBITDA_MARGIN_TREND.md → Section "Formula" → Output 1 (Current EBITDA Margin) — use stored current margin value for dual compression projection
        − (avg quarterly margin compression
        × 2 quarters forward)
 
@@ -345,8 +345,7 @@ A company with declining revenue facing a near-term debt maturity has reduced re
 
 ```
 If Revenue declining for 3+ quarters
-AND Debt Maturity Wall metric shows maturity
-within 18 months:
+AND See DEBT_MATURITY_WALL.md → Section "Stress Threshold" → Dimension 2 (Days to Nearest Maturity) — check stored maturity schedule for maturities within 18 months:
    Escalate Revenue Trend alert to next level
    Flag: "declining revenue combined with
    near-term debt maturity — refinancing
@@ -390,11 +389,11 @@ This lead time advantage is why revenue trend is included despite being a simple
 
 Updates quarterly via 10-Q (3× per year) and annually via 10-K. Revenue is a duration item; no intra-quarter structured updates available.
 
-**Rolling window maintenance:** Same requirement as EBITDA Margin Trend — the system must maintain an 8-quarter trailing time series per issuer. At each new filing the oldest quarter drops and the new quarter is added. YoY growth rates require storing the prior-year same-quarter revenue values alongside current values.
+**Rolling window maintenance:** See EBITDA_MARGIN_TREND.md → Section "Frequency" → rolling window maintenance — apply identical 8-quarter series management; store prior-year quarterly values alongside current for YoY computation. See SECTION_6.md → Section "6.3 Data Storage Schema" → Table 4 (time_series) — store Revenue YoY growth rate series as individual rows alongside EBITDA margin series.
 
 **Period subtraction requirement:** For YoY comparisons using quarterly standalone revenue, the system must apply the period subtraction logic documented in FREE_CASH_FLOW.md → Section "Frequency" → Difference 3. A Q3 10-Q reporting nine-month YTD revenue requires subtracting the six-month YTD figure from the Q2 filing to derive the standalone Q3 quarter. Both current year and prior year require this treatment for a valid YoY comparison.
 
 **Phase 2:** Monitor consolidated revenue quarterly. Compute QoQ and YoY growth rates. Track 8-quarter series. Apply Dimensions 1 and 2 thresholds. No sector context adjustment.
 
-**Phase 3:** Add Dimension 3 sector context by computing sector median revenue growth from the portfolio at onboarding and supplementing with industry data where available. Add Item 2.02 press release monitoring for early directional signal. Add Dimension 4 dual compression computation combining revenue and EBITDA margin trend series. Add Dimension 5 revenue-maturity wall interaction using stored maturity schedule from DEBT_MATURITY_WALL.md.
+**Phase 3:** Add Dimension 3 sector context by computing sector median revenue growth from the portfolio at onboarding and supplementing with industry data where available. Add Item 2.02 press release monitoring for early directional signal. Add Dimension 4 dual compression computation combining revenue and EBITDA margin trend series. Add Dimension 5 revenue-maturity wall interaction using stored maturity schedule from See DEBT_MATURITY_WALL.md → Section "Formula" → Full Maturity Schedule (Formula 2)
 
