@@ -74,7 +74,7 @@ EBITDA Margin = EBITDA / Revenue × 100
 
 EBITDA = us-gaap:OperatingIncomeLoss
        + us-gaap:DepreciationDepletionAndAmortization
-       (identical to Leverage Formula 1 EBITDA derivation)
+       (See LEVERAGE.md → Section "Formula" → Formula 1 (EBITDA = OperatingIncomeLoss + DepreciationDepletionAndAmortization) — apply identical derivation; reuse stored EBITDA value)
 
 Revenue = us-gaap:Revenues
        OR us-gaap:RevenueFromContractWithCustomer
@@ -104,7 +104,7 @@ Compressing = margin lower in at least 3 of
 last 4 quarters vs the corresponding prior quarter
 ```
 
-**Extraction note:** Both EBITDA and Revenue inputs are already extracted from prior metrics. EBITDA from LEVERAGE.md Formula 1. Revenue from FREE_CASH_FLOW.md Formula 1 (FCF Margin computation) and LIQUIDITY.md supplementary metric (Days Cash on Hand). No additional XBRL queries required. Reuse stored values.
+**Extraction note:** See LEVERAGE.md → Section "Formula" → Formula 1 outputs — reuse stored EBITDA value; no re-extraction required. See FREE_CASH_FLOW.md → Section "Formula" → Output FCF Margin (Revenue input) — reuse stored Revenue value. No additional XBRL queries required.
 
 **XBRL tags (for reference only — already extracted):**
 
@@ -210,10 +210,7 @@ If EBITDA Margin < 0%:
    may be a restructuring charge effect)
    If negative for 2 consecutive quarters:
    Critical alert
-   Cross-reference Leverage metric — EBITDA
-   negative handling (ratio undefined);
-   Coverage metric — negative EBIT coverage
-   (automatic Critical there too)
+   See LEVERAGE.md → Section "Stress Threshold" → Step 3 (Alert Trigger Rules) — EBITDA negative handling (ratio undefined applies there); See INTEREST_COVERAGE.md → Section "Stress Threshold" → Step 3 — negative EBIT coverage is automatic Critical; cross-reference both alerts
 ```
 
 ---
@@ -304,7 +301,7 @@ The reason it leads other metrics is structural: margin compression reflects the
 
 **Filing lag:** 40 days after quarter-end for 10-Q; 60 days for 10-K. Same as all income statement metrics. No intra-quarter structured update available.
 
-**The Q4 dark window:** Same severity as Coverage and Leverage — the Q4 EBITDA margin is not visible until the 10-K is filed. For companies already showing 3+ quarters of margin compression at Q3, the Q4 dark window is a significant monitoring gap. Item 2.02 earnings press releases (Phase 3) provide a directional margin signal 14–25 days before the 10-K, making them particularly valuable for this metric.
+**The Q4 dark window:** See LEVERAGE.md → Section "Signal Timing" → Q4 dark window discussion and INTEREST_COVERAGE.md → Section "Signal Timing" → Q4 dark window — apply identical monitoring gap analysis. The Q4 EBITDA margin is not visible until the 10-K is filed. For companies already showing 3+ quarters of margin compression at Q3, the Q4 dark window is a significant monitoring gap. Item 2.02 earnings press releases (Phase 3) provide a directional margin signal 14–25 days before the 10-K, making them particularly valuable for this metric.
 
 **Trend confirmation lag:** A sustained trend requires a minimum of 3 quarterly data points — meaning the earliest a 3-quarter compression trend can be confirmed is approximately 160 days (3 quarters × ~40 days filing lag + time elapsed within current quarter) after the first quarter of compression. This is the quantitative basis for the 3-quarter threshold being a Flag rather than a Watch — by the time the system confirms 3 quarters of compression, the deterioration has been developing for the better part of a year.
 
@@ -316,9 +313,9 @@ Updates quarterly via 10-Q (3× per year) and annually via 10-K, on the same sch
 
 **One incremental frequency consideration — rolling window maintenance:**
 
-The 8-quarter trailing trend series requires the system to retain historical margin values per issuer. At each new filing, the oldest quarter drops off and the new quarter is added. The system must store the full 8-quarter series, not just the current value. Storage schema implication: EBITDA Margin is one of the few metrics that requires a time-series array per issuer rather than a single current value — cross-reference Section 6 → Data Storage Schema for the per-metric time-series storage requirement.
+The 8-quarter trailing trend series requires the system to retain historical margin values per issuer. At each new filing, the oldest quarter drops off and the new quarter is added. The system must store the full 8-quarter series, not just the current value. Storage schema implication: EBITDA Margin is one of the few metrics that requires a time-series array per issuer rather than a single current value — See SECTION_6.md → Section "6.3 Data Storage Schema" → Table 4 (time_series) — store 8-quarter rolling series as individual rows; apply identical schema for EBITDA Margin and Revenue Trend.
 
 **Phase 2:** Monitor EBITDA and Revenue quarterly from XBRL. Compute margin and track 8-quarter series. Apply Dimension 2 trend thresholds. No sector benchmark comparison in Phase 2 (requires benchmark setup).
 
-**Phase 3:** Add Damodaran sector benchmark comparison for Dimension 1 absolute thresholds. Add Item 2.02 press release monitoring for early directional signal. Add Dimension 4 projected leverage computation combining margin trend with stored leverage time series.
+**Phase 3:** Add Damodaran sector benchmark comparison for Dimension 1 absolute thresholds. Add Item 2.02 press release monitoring for early directional signal. Add Dimension 4 projected leverage computation — See LEVERAGE.md → Section "Extraction Fallback Logic" → derived EBITDA and Net Debt values — use stored quarterly values as inputs for projected leverage computation combining margin trend with stored leverage time series.
 
