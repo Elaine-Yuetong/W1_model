@@ -341,9 +341,9 @@ Interest can increase $118.4M before breach.
 - Testing frequency (quarterly, semi-annual, annual)
 
 **Deterministic inputs (from prior metrics):**
-- Current leverage ratio → from Leverage Formula 1
-- Current coverage ratio → from Coverage Formula 1
-- Current cash / available liquidity → from Liquidity Formula 1
+- See LEVERAGE.md → Section "Formula" → Formula 1 outputs — reuse stored Net Debt/EBITDA ratio; no re-extraction required
+- See INTEREST_COVERAGE.md → Section "Formula" → Formula 1 outputs — reuse stored EBITDA/Interest ratio; no re-extraction required
+- See LIQUIDITY.md → Section "Formula" → Output 1A (Cash Ratio) and Output 1D (Available Liquidity Coverage) — reuse stored values; no re-extraction required
 - Net Debt, EBITDA, Interest Expense → already extracted
 
 **Error handling:** If LLM cannot extract the covenant threshold, headroom = null. Do not attempt to compute headroom against an assumed threshold. Do not default to industry-average covenant levels. Null headroom for a leveraged issuer should trigger escalation to manual review — covenant terms exist but were not successfully extracted.
@@ -430,7 +430,7 @@ Scenario 1 — Base case (management guidance):
    Forward Net Debt = current Net Debt
                     − projected FCF (next 4 quarters)
                     + scheduled debt maturities
-                      (from Debt Maturity Wall metric)
+                      (See DEBT_MATURITY_WALL.md → Section "Formula" → Derived Output E (Projected Interest Rate Reset Impact) — use stored post-reset interest expense projection)
    Forward Leverage = Forward Net Debt / Forward EBITDA
    Forward Headroom = Covenant Threshold − Forward Leverage
 
@@ -457,7 +457,7 @@ Scenario 4 — Interest rate reset stress:
    Post-reset Interest Expense =
        Current Interest Expense
      + Projected rate reset impact
-       (from Debt Maturity Wall metric)
+       (See DEBT_MATURITY_WALL.md → Section "Formula" → Derived Output E (Projected Interest Rate Reset Impact) — use stored post-reset interest expense projection)
    Post-reset Coverage =
        Current EBITDA / Post-reset Interest Expense
    Post-reset Coverage Headroom =
@@ -715,9 +715,9 @@ Step 5 — If credit agreement is not publicly filed:
 
 | Input / Component | Formula | Source Document | Structured or Unstructured | Notes |
 |---|---|---|---|---|
-| **Current Leverage Ratio** | F1, F2, F3 | Derived from Leverage Formula 1 (already extracted) | Structured — reused from prior metric | Net Debt / EBITDA computed deterministically from XBRL. No re-extraction needed — pull from stored Leverage metric output for same period. If Leverage Formula 1 null for this period: Covenant Headroom F1 = null; flag: "leverage ratio unavailable — headroom cannot be computed." |
-| **Current Coverage Ratio** | F1, F2, F3 | Derived from Coverage Formula 1 (already extracted) | Structured — reused from prior metric | EBITDA / Interest Expense computed deterministically. Pull from stored Coverage metric output. Same null propagation rule as leverage ratio. |
-| **Current Cash / Available Liquidity** | F1, F2, F3 | Derived from Liquidity Formula 1 (already extracted) | Structured — reused from prior metric | Cash and available liquidity already extracted. Pull from stored Liquidity metric output. For liquidity covenant headroom only. |
+| **Current Leverage Ratio** | F1, F2, F3 | See LEVERAGE.md → Section "Formula" → Formula 1 outputs — reuse stored Net Debt/EBITDA ratio; no re-extraction required. | Structured — reused from prior metric | Net Debt / EBITDA computed deterministically from XBRL. No re-extraction needed — pull from stored Leverage metric output for same period. If Leverage Formula 1 null for this period: Covenant Headroom F1 = null; flag: "leverage ratio unavailable — headroom cannot be computed." |
+| **Current Coverage Ratio** | F1, F2, F3 | See INTEREST_COVERAGE.md → Section "Formula" → Formula 1 outputs — reuse stored EBITDA/Interest ratio; no re-extraction required. | Structured — reused from prior metric | EBITDA / Interest Expense computed deterministically. Pull from stored Coverage metric output. Same null propagation rule as leverage ratio. |
+| **Current Cash / Available Liquidity** | F1, F2, F3 | See LIQUIDITY.md → Section "Formula" → Formula 1 outputs — reuse stored values; no re-extraction required. | Structured — reused from prior metric | Cash and available liquidity already extracted. Pull from stored Liquidity metric output. For liquidity covenant headroom only. |
 | **Current Capex** | F1 (capex covenant only) | Cash Flow Statement — Investing Activities | Structured — XBRL tagged | `us-gaap:PaymentsToAcquirePropertyPlantAndEquipment` — already extracted for FCF metric. Reuse stored value. |
 | **Covenant Compliance Text** | F1, F2, F3 | XBRL — DebtInstrumentCovenantCompliance | **Semi-structured — XBRL tag exists; content is free text requiring keyword analysis** | Tag exists in US GAAP taxonomy. Returns a text string, not a binary flag. Filer adoption inconsistent. When populated: keyword scan for breach/compliance. When null: fall back to LLM Debt Footnote extraction. Never treat null as compliance. |
 | **Maximum Leverage Covenant Threshold** | F1, F2, F3 | Debt Footnote — covenant compliance section | **Unstructured — LLM required** | No XBRL tag exists. LLM reads Debt Footnote covenant section. Extracts numeric threshold (e.g. 5.5x) and exact covenant name as stated in filing. If not found in Debt Footnote: escalate to Credit Agreement Exhibit 10.x. If neither source yields threshold: headroom = null; flag: "leverage covenant threshold not extracted — headroom computation not possible." |
@@ -1859,7 +1859,7 @@ March for calendar-year companies)
 The covenant headroom metric's timing interacts with other metrics in ways that create combined signals more informative than any individual metric:
 
 **Interaction with Leverage and Coverage:**
-The ratio inputs to covenant headroom are the same as those computed for the leverage and coverage metrics. When both the standalone ratio alert (e.g. leverage in Aggressive band) and the covenant headroom alert (e.g. 12% headroom) are active simultaneously, the combined signal confirms that the deterioration is both economically significant and legally consequential. Neither alone is as informative as both together.
+See LEVERAGE.md → Section "Signal Timing" and INTEREST_COVERAGE.md → Section "Signal Timing" — covenant headroom compression trend mirrors these metrics' deterioration; use stored alert levels for combined signal assessment. When both the standalone ratio alert (e.g. leverage in Aggressive band) and the covenant headroom alert (e.g. 12% headroom) are active simultaneously, the combined signal confirms that the deterioration is both economically significant and legally consequential. Neither alone is as informative as both together.
 
 **Interaction with Debt Maturity Wall:**
 The interest rate reset stress test in Covenant Headroom Formula 3 uses the maturity schedule from the Debt Maturity Wall metric. When a large maturity is approaching and the interest rate reset would compress coverage below the covenant minimum, the covenant headroom metric quantifies exactly how many basis points of rate increase the company can absorb before breaching. This is the most precise forward-looking stress computation the system produces.
@@ -1912,7 +1912,7 @@ The Leverage Frequency section covers the baseline filing schedule, EDGAR availa
 
 ---
 
-### What Is the Same as Prior Metrics
+### What Is the Same as Prior Metrics (See LEVERAGE.md → Section "Frequency" → full section — apply identical baseline framework; this section documents covenant-specific differences only)
 
 | Channel | Filing Type | Phase 2 | Phase 3 |
 |---|---|---|---|
@@ -2021,6 +2021,8 @@ Phase 3 — full LLM extraction for all issuers:
 
 When a covenant waiver is obtained, it has an expiry date. If the company's financial condition has not improved by that date and no permanent amendment is obtained, the breach recurs automatically. Waiver expiry monitoring is the covenant-equivalent of the debt maturity countdown — a fixed future date that generates an escalating alert as it approaches.
 
+> See DEBT_MATURITY_WALL.md → Section "Frequency" → Difference 1 (Daily Countdown) — apply identical daily countdown computation logic to waiver expiry dates
+
 ```
 Waiver expiry monitoring:
 
@@ -2099,7 +2101,7 @@ Do not overwrite Tier 1 with Tier 2 data.
 
 **Difference 5 — Step-down schedule generates independent calendar-based alerts**
 
-Covenant step-downs are fixed future threshold changes that generate alerts through proximity, not through ratio movement. Like the maturity wall countdown, step-down proximity alerts run daily against a stored step-down schedule.
+Covenant step-downs are fixed future threshold changes that generate alerts through proximity, not through ratio movement. Like the maturity wall countdown, step-down proximity alerts run daily against a stored step-down schedule (See DEBT_MATURITY_WALL.md → Section "Frequency" → Difference 1 (Daily Countdown) — apply identical daily computation; substitute step-down date for maturity date).
 
 ```
 Step-down proximity monitoring:
