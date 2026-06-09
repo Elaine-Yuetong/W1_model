@@ -235,7 +235,7 @@ Near-Term Maturity (12 months) =
   + us-gaap:CommercialPaper
 
 Maturity Coverage Ratio =
-    Available Liquidity (from Liquidity metric)
+    Available Liquidity (See LIQUIDITY.md → Section "Formula" → Output 1A (Cash) and Output 1D (Available Liquidity Coverage) — use stored cash and short-term investments values; Phase 3 adds revolver per LIQUIDITY.md Formula 2)
     / Near-Term Maturity
 
 Where Available Liquidity =
@@ -563,7 +563,7 @@ Unchanged from original draft.
 
 | Field | Detail |
 |---|---|
-| Where it lives | Debt Footnote — revolving credit facility description paragraph (same location as Liquidity Formula 2 Item 2a) |
+| Where it lives | Debt Footnote — revolving credit facility description paragraph (See LIQUIDITY.md → Section "Where it lives" → Item 2a (Revolving Credit Facility) — identical Debt Footnote location; extract same fields (commitment, drawn, letters of credit, maturity) |
 | Available in | 10-K and 10-Q |
 | Exact location | Revolving credit facility description paragraph. The maturity date is typically stated explicitly: "the revolving credit facility matures on [date]." |
 | What LLM should extract | Maturity date of the revolving credit facility. This does not appear in the maturity schedule table because revolvers are not term debt — they are committed facilities with no scheduled principal amortisation. Store separately from the term debt maturity schedule. Flag if maturity within 18 months: "revolving credit facility maturing [date] — primary liquidity backstop at risk; renewal required." |
@@ -667,9 +667,9 @@ The maturity schedule is the most analytically important item in this metric and
 
 | Input / Component | Formula | XBRL Tag | Structured or Unstructured | Notes |
 |---|---|---|---|---|
-| **Current Portion of LT Debt** | F1 | Primary: `us-gaap:LongTermDebtCurrent` Fallback: `us-gaap:DebtCurrent` | Structured — with double-count risk | Same extraction logic as Leverage Formula 1. `DebtCurrent` may aggregate short-term borrowings already captured separately — check for overlap before summing. Represents only the Year 1 component of the maturity wall visible from balance sheet XBRL. |
+| **Current Portion of LT Debt** | F1 | Primary: `us-gaap:LongTermDebtCurrent` Fallback: `us-gaap:DebtCurrent` | Structured — with double-count risk | See LEVERAGE.md → Section "Extraction Fallback Logic" → Input 2 (Current Portion of Long-Term Debt) — apply identical double-count check before summing with short-term borrowings. `DebtCurrent` may aggregate short-term borrowings already captured separately — check for overlap before summing. Represents only the Year 1 component of the maturity wall visible from balance sheet XBRL. |
 | **Short-Term Borrowings** | F1 | Primary: `us-gaap:ShortTermBorrowings` Fallback 1: `us-gaap:CommercialPaper` Fallback 2: `us-gaap:NotesPayableCurrent` Fallback 3: `us-gaap:LineOfCreditCurrent` | Structured — must sum all non-null values | Same Apple validation finding applies — sum all non-null tags; not mutually exclusive. Commercial paper and drawn revolver can coexist. |
-| **Cash & Equivalents** | F1 | Primary: `us-gaap:CashAndCashEquivalentsAtCarryingValue` Fallback 1: `us-gaap:CashCashEquivalentsAndShortTermInvestments` Fallback 2: `us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents` | Structured — with restriction risk | Same extraction logic as Leverage and Liquidity metrics. Fallback 2 includes restricted cash — subtract `us-gaap:RestrictedCashAndCashEquivalents` if available; flag if not. |
+| **Cash & Equivalents** | F1 | Primary: `us-gaap:CashAndCashEquivalentsAtCarryingValue` Fallback 1: `us-gaap:CashCashEquivalentsAndShortTermInvestments` Fallback 2: `us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents` | Structured — with restriction risk | See LEVERAGE.md → Section "Extraction Fallback Logic" → Input 5 (Unrestricted Cash) — apply identical three-step fallback chain including restriction check. Fallback 2 includes restricted cash — subtract `us-gaap:RestrictedCashAndCashEquivalents` if available; flag if not. |
 | **Short-Term Investments** | F1 | Primary: `us-gaap:ShortTermInvestments` Fallback: `us-gaap:MarketableSecuritiesCurrent` | Structured — with bundling risk | Check for overlap with cash tag. If `CashCashEquivalentsAndShortTermInvestments` was used for cash, do not add short-term investments separately. |
 | **Near-Term Maturity Total** (derived F1) | F1 | No standard tag | Structured inputs, derived result | = LongTermDebtCurrent + ShortTermBorrowings + CommercialPaper (sum all non-null). Represents Year 1 maturity wall only. If all components null → Near-Term Maturity = null → Maturity Coverage Ratio = null. |
 | **Maturity Coverage Ratio** (derived F1) | F1 | No standard tag | Structured inputs, derived result | = (Cash + ShortTermInvestments) / Near-Term Maturity. Phase 2 cash only — revolver excluded; flag. Phase 3 adds revolver from LLM. If Near-Term Maturity = 0: ratio = undefined — flag as "no near-term debt maturities; maturity coverage adequate by definition." If Near-Term Maturity null → ratio null. |
@@ -683,7 +683,7 @@ The maturity schedule is the most analytically important item in this metric and
 | **Maturity Concentration Ratio** (derived F2) | F2 | No standard tag | Structured inputs, derived result | = Maturities in year n / Total Debt. Computed for each year once schedule is established. Flag if any single year > 30% of total debt. Flag if > 50% as severe concentration. |
 | **Near-Term Ratio** (derived F2) | F2 | No standard tag | Structured inputs, derived result | = (Year 1 + Year 2) / Total Debt. Flag if > 40%. |
 | **Weighted Average Debt Maturity** (derived F2) | F2 | No standard tag | Structured inputs, derived result | = Σ (Year n Maturity × Years to Maturity n) / Total Debt. Uses convention: Year 1=1.0, Year 2=2.0, Year 3=3.0, Year 4=4.0, Year 5=5.0, Thereafter=7.0. Flag if WADM < 3.0 years. Flag if WADM declining across consecutive annual filings. |
-| **Liquidity-to-Maturity Coverage** (derived F2) | F2 | No standard tag | Semi-structured inputs, derived result | Full Coverage = Available Liquidity (cash + revolver) / Year 1 Maturities. Extended Coverage = (Available Liquidity + Projected Annual FCF) / (Year 1 + Year 2 Maturities). Revolver component requires LLM extraction (Phase 3). FCF from Formula 1 of FCF metric. Flag if Full Coverage < 1.0x. |
+| **Liquidity-to-Maturity Coverage** (derived F2) | F2 | No standard tag | Semi-structured inputs, derived result | Full Coverage = Available Liquidity (cash + revolver) / Year 1 Maturities. Extended Coverage = (Available Liquidity + Projected Annual FCF) / (Year 1 + Year 2 Maturities). Revolver component requires LLM extraction (Phase 3). See FREE_CASH_FLOW.md → Section "Formula" → Output 1 (FCF absolute) — use stored quarterly FCF and annualised run-rate values. Flag if Full Coverage < 1.0x. |
 | **Revolving Credit Facility Maturity Date** | F2 | No standard tag | **Unstructured — LLM required** | Lives in Debt Footnote revolving credit facility description paragraph. LLM extracts maturity date — store as date field not dollar amount. Critical: revolver maturing within 18 months triggers flag regardless of other metrics. Revolvers do not appear in the standard maturity schedule table — must be tracked separately. |
 | **Covenant Acceleration Provisions** | F2 | No standard tag | **Unstructured — LLM required** | Lives in Debt Footnote covenant section and Exhibit 10.x credit agreement. LLM extracts: (1) cross-default provisions, (2) change of control provisions, (3) any disclosed covenant breach. Output is structured flags (true/false + description), not dollar amounts. A disclosed covenant breach is an automatic escalation trigger regardless of maturity schedule. |
 | **Individual Tranche Descriptions** | F3 | No standard tag at tranche level | **Unstructured — LLM required** | Lives in Debt Footnote summary table and instrument description paragraphs. LLM extracts per-tranche: principal, exact maturity date, coupon rate, coupon type, instrument type, secured status, callable status. Most analytically granular extraction in this metric. |
@@ -741,7 +741,7 @@ Same four rules as prior metrics apply, plus four additional rules specific to t
 
 ### Component 1 — Formula 1 Inputs (Balance Sheet)
 
-These use the same fallback logic as Leverage Formula 1 and Liquidity Formula 1. Summarised here for completeness with cross-references.
+See LEVERAGE.md → Section "Extraction Fallback Logic" → Input 1 through Input 3 (Short-Term Borrowings, Current LT Debt, Long-Term Debt) and LIQUIDITY.md → Section "Extraction Fallback Logic" → Input 5 (Cash) — apply identical fallback chains for all four inputs. Summarised here for completeness with cross-references.
 
 **Current Portion of LT Debt:**
 ```
@@ -1728,7 +1728,7 @@ wall's unique contribution to real-time monitoring.
 
 ### Overview
 
-The debt maturity wall has the most complex update structure of any metric in this spec. It differs from all prior metrics in three fundamental ways that make a simple reference to the Leverage Frequency section insufficient.
+The debt maturity wall has the most complex update structure of any metric in this spec. It differs from all prior metrics in three fundamental ways that make a simple reference to the Leverage Frequency section insufficient (See LEVERAGE.md → Section "Frequency" → full section — apply identical baseline six-channel framework; this section documents maturity-wall-specific differences only).
 
 First, it has two distinct structured update frequencies running simultaneously — annual for the full schedule and quarterly for the near-term balance sheet component. Second, it generates daily alerts from a countdown computation that requires no filing trigger. Third, it has more relevant intra-quarter event-driven update channels than any other metric because debt issuances, repayments, and amendments are directly and immediately visible through prospectus and 8-K filings.
 
