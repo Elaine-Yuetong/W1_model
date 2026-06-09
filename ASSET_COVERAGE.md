@@ -39,7 +39,7 @@ Asset Coverage Ratio =
     Total Assets / Total Debt
 
 Total Assets = us-gaap:Assets
-Total Debt   = same definition as Leverage Formula 1
+Total Debt   = See LEVERAGE.md → Section "Formula" → Formula 1 (Total Debt = Short-Term Borrowings + Current LT Debt + Long-Term Debt) — apply identical three-component definition
                (Short-Term Borrowings + Current LT Debt
                + Non-Current LT Debt)
 
@@ -60,14 +60,14 @@ Deferred Tax Asset = us-gaap:DeferredTaxAssetsNet
 
 **Why two versions:** Total Asset Coverage is the broadest measure and the simplest to compute. Tangible Asset Coverage is more analytically meaningful for credit purposes because it excludes assets with minimal liquidation value. For most credit stress assessments, Tangible Asset Coverage is the primary ratio. Total Asset Coverage is computed as a supplementary cross-check.
 
-**Extraction note:** Total Debt inputs are already extracted as part of LEVERAGE.md Formula 1. Total Assets, Goodwill, and Intangible Assets are balance sheet items not previously extracted — these are the only incremental XBRL queries required for this metric.
+**Extraction note:** See LEVERAGE.md → Section "Formula" → Formula 1 XBRL Tags table and Section "Extraction Fallback Logic" → Inputs 1–4 — reuse all stored Total Debt values; only Total Assets, Goodwill, Intangibles, and DTA are incremental extractions.
 
 **XBRL tags:**
 
 | Input | Primary Tag | Fallback Tag |
 |---|---|---|
 | Total Assets | `us-gaap:Assets` | Derived: Current Assets + Non-Current Assets |
-| Total Debt | Reuse from LEVERAGE.md | — |
+| Total Debt | See LEVERAGE.md → Section "Formula" → Formula 1 XBRL Tags table — reuse stored debt tag values; no re-extraction required | — |
 | Goodwill | `us-gaap:Goodwill` | `us-gaap:GoodwillNet` |
 | Intangible Assets (net) | `us-gaap:IntangibleAssetsNetExcludingGoodwill` | `us-gaap:FiniteLivedIntangibleAssetsNet` + `us-gaap:IndefiniteLivedIntangibleAssetsExcludingGoodwill` |
 | Deferred Tax Asset (net) | `us-gaap:DeferredTaxAssetsLiabilitiesNet` | `us-gaap:DeferredTaxAssetsNet` |
@@ -129,7 +129,7 @@ Liquidation Value =
 | Goodwill | Balance Sheet — Non-Current Assets | "Goodwill" — separate line item | 10-K and 10-Q |
 | Intangible Assets (net) | Balance Sheet — Non-Current Assets | "Intangible assets, net" or "Other intangible assets, net" | 10-K and 10-Q |
 | Deferred Tax Asset | Balance Sheet — Non-Current Assets | "Deferred tax assets" or "Deferred income taxes" | 10-K and 10-Q |
-| Total Debt | See LEVERAGE.md → Section "Where it lives" | Balance Sheet — Current and Non-Current Liabilities | 10-K and 10-Q |
+| Total Debt | See LEVERAGE.md → Section "Where it lives" → Formula 1 table — all debt line item locations identical | Balance Sheet — Current and Non-Current Liabilities | 10-K and 10-Q |
 
 **Formula 2 inputs — Footnotes (Phase 3 LLM):**
 
@@ -154,7 +154,7 @@ The debt footnote's collateral description identifies which assets are encumbere
 | **Goodwill** | `us-gaap:Goodwill` | Structured — reliably tagged | Consistently present for companies with acquisition history. If null: company has no goodwill — treat as zero; no flag needed. |
 | **Intangible Assets (net)** | Primary: `us-gaap:IntangibleAssetsNetExcludingGoodwill` Fallback: sum of finite and indefinite-lived components | Structured — reliably tagged | Fallback required when company separates finite and indefinite-lived intangibles. Sum both components. |
 | **Deferred Tax Asset** | `us-gaap:DeferredTaxAssetsLiabilitiesNet` | Structured — tagged; may be negative (net liability) | If negative: company has net deferred tax liability — set to zero for tangible asset calculation (liability side handled in total assets already). |
-| **Total Debt** | Reuse from LEVERAGE.md | Structured — already extracted | No re-extraction needed. |
+| **Total Debt** | See LEVERAGE.md → Section "Formula" → Formula 1 outputs — reuse stored value; no re-extraction needed. | Structured — already extracted | No re-extraction needed. |
 | **Tangible Asset Coverage** (derived) | No tag | Structured inputs, derived result | = (Total Assets − Goodwill − Intangibles − DTA) / Total Debt. Null propagation: if Total Assets null → null; if Total Debt null → null; if any deduction null → compute without that deduction and flag. |
 | **PP&E composition by type** | No standard tag at category level | **Semi-structured — XBRL dimensional; unreliable** | PP&E is tagged in total (`us-gaap:PropertyPlantAndEquipmentNet`) but category-level breakdown (land, buildings, equipment) uses dimensional tags that are inconsistently populated. LLM extraction from PP&E Footnote table is more reliable for Formula 2 haircut application. |
 | **Inventory type breakdown** | `us-gaap:InventoryRawMaterials`, `us-gaap:InventoryWorkInProcess`, `us-gaap:InventoryFinishedGoods` | Semi-structured — component tags exist; not always used | When component tags present: use for haircut differentiation. When absent: use aggregate inventory with blended 50% haircut. |
@@ -211,7 +211,7 @@ Step 3: If null: set to 0 with flag
         assets; zero assumption is acceptable
 ```
 
-**Total Debt:** Cross-reference LEVERAGE.md → Section "Extraction Fallback Logic" → entire Input 1–7 fallback chain. Identical.
+**Total Debt:** See LEVERAGE.md → Section "Extraction Fallback Logic" → Inputs 1 through 4 (Short-Term Borrowings, Current LT Debt, Long-Term Debt, Total Debt derived) — apply identical fallback chains including double-count check and finance lease contamination flag.
 
 **Tangible Asset Coverage null propagation:**
 ```
@@ -317,7 +317,7 @@ is the honest output.
 | Trend Condition | Alert Level |
 |---|---|
 | Any coverage ratio declining for 3 consecutive quarters | Watch regardless of absolute level |
-| Tangible coverage declining AND leverage rising simultaneously | Flag — equity eroding from both sides |
+| Tangible coverage declining AND leverage rising simultaneously | Flag — equity eroding from both sides; See LEVERAGE.md → Section "Stress Threshold" → Step 3 (Alert Trigger Rules) — apply dual-metric escalation rule when Asset Coverage declining and Leverage rising in same period |
 | Total coverage approaching 1.0x from above | Flag — trajectory toward technical insolvency |
 
 ---
@@ -328,9 +328,9 @@ is the honest output.
 
 Asset coverage is a stock measure computed from balance sheet values that change slowly. It is the most lagging of all metrics in this spec — typically confirming stress that has already been signalled by FCF compression, coverage deterioration, and leverage deterioration over multiple prior quarters. It rarely provides early warning.
 
-The exception is rapid balance sheet deterioration from large impairment charges — when a company writes down goodwill or intangibles materially, tangible asset coverage improves while total coverage collapses. This pattern (falling total coverage with stable or improving tangible coverage) signals that the company has recognised that its intangible assets were overvalued — itself a credit stress signal. The LLM layer can detect impairment charges from the income statement and cross-reference them to asset coverage changes.
+The exception is rapid balance sheet deterioration from large impairment charges — when a company writes down goodwill or intangibles materially, tangible asset coverage improves while total coverage collapses. This pattern (falling total coverage with stable or improving tangible coverage) signals that the company has recognised that its intangible assets were overvalued — itself a credit stress signal. See LOSS_PROVISIONS.md → Section "Signal Timing" → Signal Mode 2 (Sudden Adverse Event) — impairment charges follow similar sudden-event detection pattern; 8-K Item 2.05 triggers immediate recomputation of asset coverage.
 
-**Filing lag:** 40 days after quarter-end for 10-Q; 60 days for 10-K. All inputs are balance sheet instant measures. No intra-quarter updates.
+**Filing lag:** See LEVERAGE.md → Section "Signal Timing" → Three-Tier Timing Structure table — apply identical Tier 1 filing lag; balance sheet items update only at filing dates. No intra-quarter updates.
 
 **Most useful analytical application:** Asset coverage is least useful as a standalone early warning signal and most useful as a distress severity assessment tool — when other metrics have already flagged stress, asset coverage tells you how much recovery creditors can expect in a default scenario. It is the answer to "how bad could it get?" rather than "is stress developing?"
 
@@ -342,7 +342,7 @@ Updates quarterly via 10-Q and annually via 10-K — same schedule as all balanc
 
 Formula 2 (liquidation-adjusted) updates annually at 10-K when PP&E footnote, Inventory footnote, and Intangibles footnote are fully disclosed. Between annual filings, the prior 10-K asset composition is retained with a flag: "liquidation haircut applied to prior 10-K asset composition — verify no material asset disposals or acquisitions since [date]."
 
-**Event-driven updates:** Material asset sales, acquisitions, and impairment charges disclosed via 8-K Item 2.05 or Item 8.01 should trigger an immediate recomputation of Formula 1 book coverage using updated balance sheet figures where available. Formula 2 cannot be updated intra-quarter without LLM re-extraction of the asset composition footnotes.
+**Event-driven updates:** See DEBT_MATURITY_WALL.md → Section "Frequency" → 8-K Item 1.01 processing — apply similar rolling schedule patch logic to asset coverage when material asset disposals are confirmed via 8-K; update Formula 1 balance sheet figures. Formula 2 cannot be updated intra-quarter without LLM re-extraction of the asset composition footnotes.
 
 **Phase 2:** Compute Formula 1 (Total and Tangible Asset Coverage) from XBRL quarterly. Apply Dimensions 1 and 2 thresholds. No liquidation adjustment.
 
